@@ -1,4 +1,7 @@
 """Example of whole body controller on A1 robot."""
+use_cMPC = False
+print_COT = True
+
 import os
 import inspect
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
@@ -23,22 +26,24 @@ from mpc_controller import gait_generator as gait_generator_lib
 from mpc_controller import locomotion_controller
 from mpc_controller import openloop_gait_generator
 from mpc_controller import raibert_swing_leg_controller
-#from mpc_controller import torque_stance_leg_controller
-#import mpc_osqp
-from mpc_controller import torque_stance_leg_controller_quadprog as torque_stance_leg_controller
+if use_cMPC:
+  from mpc_controller import torque_stance_leg_controller
+  import mpc_osqp
+else: from mpc_controller import torque_stance_leg_controller_quadprog as torque_stance_leg_controller
 
 
 from motion_imitation.robots import a1
 from motion_imitation.robots import robot_config
 from motion_imitation.robots.gamepad import gamepad_reader
 
+flags.DEFINE_bool("record_video", False, "Record video")
 flags.DEFINE_string("logdir", None, "where to log trajectories.")
 flags.DEFINE_bool("use_gamepad", False,
                   "whether to use gamepad to provide control input.")
 flags.DEFINE_bool("use_real_robot", False,
                   "whether to use real robot or simulation")
-flags.DEFINE_bool("show_gui", False, "whether to show GUI.")
-flags.DEFINE_float("max_time_secs", 1., "maximum time to run the robot.")
+flags.DEFINE_bool("show_gui", True, "whether to show GUI.")
+flags.DEFINE_float("max_time_secs", 8*10., "maximum time to run the robot.")
 FLAGS = flags.FLAGS
 
 _NUM_SIMULATION_ITERATION_STEPS = 300
@@ -100,6 +105,25 @@ def _generate_example_linear_angular_speed(t):
 
   return speed[0:3], speed[3], False
 
+def _generate_example_linear_speed(t):
+  vx = 0.5
+
+  time_points = (0, 2*0+0.01)
+  speed_points = ((0, 0, 0, 0), (vx, 0, 0, 0))
+
+  speed = scipy.interpolate.interp1d(time_points,
+                                     speed_points,
+                                     kind="previous",
+                                     fill_value="extrapolate",
+                                     axis=0)(t)
+  return speed[0:3], speed[3], False
+
+def _generate_example_constant_linear_speed(t):
+  vx = 1.2
+  vy = 0
+  vz = 0
+  wz = 0
+  return [vx,vy,vz],wz,False
 
 def _setup_controller(robot):
   """Demonstrates how to create a locomotion controller."""
@@ -124,14 +148,26 @@ def _setup_controller(robot):
       desired_height=robot.MPC_BODY_HEIGHT,
       foot_clearance=0.01)
 
-  st_controller = torque_stance_leg_controller.TorqueStanceLegController(
+  if use_cMPC:
+    st_controller = torque_stance_leg_controller.TorqueStanceLegController(
+        robot,
+        gait_generator,
+        state_estimator,
+        desired_speed=desired_speed,
+        desired_twisting_speed=desired_twisting_speed,
+        desired_body_height=robot.MPC_BODY_HEIGHT,    
+        qp_solver = mpc_osqp.QPOASES, #or mpc_osqp.OSQP
+        body_mass = robot.MPC_BODY_MASS,
+        body_inertia = robot.MPC_BODY_INERTIA
+        )
+  else:
+    st_controller = torque_stance_leg_controller.TorqueStanceLegController(
       robot,
       gait_generator,
       state_estimator,
       desired_speed=desired_speed,
       desired_twisting_speed=desired_twisting_speed,
       desired_body_height=robot.MPC_BODY_HEIGHT
-      #,qp_solver = mpc_osqp.QPOASES #or mpc_osqp.OSQP
       )
 
   controller = locomotion_controller.LocomotionController(
@@ -150,13 +186,36 @@ def _update_controller_params(controller, lin_speed, ang_speed):
   controller.stance_leg_controller.desired_speed = lin_speed
   controller.stance_leg_controller.desired_twisting_speed = ang_speed
 
+def _MoveCameraAlongRobot(p, robot):
+  # for moving the camera with the robot
+  cubePos = robot.GetBasePosition()
+  cubePos = (cubePos[0], cubePos[1], robot.MPC_BODY_HEIGHT)
+  croll, cpitch, cyaw = robot.GetBaseRollPitchYaw()
+  cpitch = -np.pi/8*0
+  cyaw = cyaw+np.pi/6*0+np.pi/2*0    
+  cdist = 0.8
+  p.resetDebugVisualizerCamera(cameraDistance=cdist, cameraYaw=np.rad2deg(cyaw), cameraPitch=np.rad2deg(cpitch), cameraTargetPosition=cubePos)
+
+def _SetCamera(p, robot):
+  _MoveCameraAlongRobot(p, robot)
+
 
 def main(argv):
   """Runs the locomotion controller example."""
   del argv # unused
 
   # Construct simulator
-  if FLAGS.show_gui and not FLAGS.use_real_robot:
+  if FLAGS.record_video or True:
+    p = pybullet
+    p.connect(p.GUI, options="--width=1280 --height=720 --mp4=\"test.mp4\" --mp4fps=24")
+    p.configureDebugVisualizer(p.COV_ENABLE_GUI,0)
+    #p.configureDebugVisualizer(p.COV_ENABLE_SINGLE_STEP_RENDERING,1) # it doesn't work on my computer
+
+    # another variant:
+    #p = pybullet
+    #p.connect(p.GUI)
+    #p.startStateLogging(p.STATE_LOGGING_VIDEO_MP4, "test.mp4")
+  elif FLAGS.show_gui and not FLAGS.use_real_robot:
     p = bullet_client.BulletClient(connection_mode=pybullet.GUI)
   else:
     p = bullet_client.BulletClient(connection_mode=pybullet.DIRECT)
@@ -191,7 +250,9 @@ def main(argv):
     gamepad = gamepad_reader.Gamepad()
     command_function = gamepad.get_command
   else:
-    command_function = _generate_example_linear_angular_speed
+    #command_function = _generate_example_linear_angular_speed
+    command_function = _generate_example_linear_speed
+    #command_function = _generate_example_constant_linear_speed
 
   if FLAGS.logdir:
     logdir = os.path.join(FLAGS.logdir,
@@ -201,7 +262,11 @@ def main(argv):
   start_time = robot.GetTimeSinceReset()
   current_time = start_time
   com_vels, imu_rates, actions = [], [], []
+  E = 0
+  _SetCamera(p, robot)
   while current_time - start_time < FLAGS.max_time_secs:
+    _MoveCameraAlongRobot(p,robot)
+    
     #time.sleep(0.0008) #on some fast computer, works better with sleep on real A1?
     start_time_robot = current_time
     start_time_wall = time.time()
@@ -213,13 +278,21 @@ def main(argv):
       break
     _update_controller_params(controller, lin_speed, ang_speed)
     controller.update()
-    hybrid_action, _ = controller.get_action()
+    hybrid_action, _ = controller.get_action() # hybrid_action, contact_forces =
+    #print("FootPositionsInBaseFrame: ",robot.GetFootPositionsInBaseFrame())
     com_vels.append(np.array(robot.GetBaseVelocity()).copy())
     imu_rates.append(np.array(robot.GetBaseRollPitchYawRate()).copy())
     actions.append(hybrid_action)
     robot.Step(hybrid_action)
     current_time = robot.GetTimeSinceReset()
+    #real_torques.append(robot.GetMotorTorques())
 
+    # COT
+    if print_COT:
+      E = E + robot.GetEnergyConsumptionPerControlStep()
+      COT = E/(robot.MPC_BODY_MASS*9.8*robot.GetBasePosition()[0])
+      print("COT=",np.round(COT,2))
+      print("v=",robot.GetBaseVelocity()[0])
     if not FLAGS.use_real_robot:
       expected_duration = current_time - start_time_robot
       actual_duration = time.time() - start_time_wall
@@ -233,7 +306,9 @@ def main(argv):
     np.savez(os.path.join(logdir, 'action.npz'),
              action=actions,
              com_vels=com_vels,
-             imu_rates=imu_rates)
+             imu_rates=imu_rates
+             #real_torques=real_torques
+             )
     logging.info("logged to: {}".format(logdir))
 
 
