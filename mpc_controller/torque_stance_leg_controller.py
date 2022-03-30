@@ -47,6 +47,9 @@ _MPC_WEIGHTS = (5, 5, 0.2, 0, 0, 10, 0., 0., 1., 1., 1., 0., 0)
 _PLANNING_HORIZON_STEPS = 10
 _PLANNING_TIMESTEP = 0.025
 
+# Gaits for Impedance Control for leg
+_KP = np.array([100, 100, 100])*0
+_KD = np.array([2, 2, 2])*0
 
 class TorqueStanceLegController(leg_controller.LegController):
   """A torque based stance leg controller framework.
@@ -68,7 +71,8 @@ class TorqueStanceLegController(leg_controller.LegController):
                                            0.25447),
       num_legs: int = 4,
       friction_coeffs: Sequence[float] = (0.45, 0.45, 0.45, 0.45),
-      qp_solver = convex_mpc.QPOASES
+      qp_solver = convex_mpc.QPOASES,
+      use_springiness_in_stance: bool = False
   ):
     """Initializes the class.
 
@@ -111,6 +115,12 @@ class TorqueStanceLegController(leg_controller.LegController):
         qp_solver
         
     )
+    self.foot_positions_des = self._robot.GetFootPositionsInBaseFrame()
+    self.foot_velocities_des = [0]*4 
+    self.last_foot_contact_states = np.array(
+        [True, True, True, True],
+        dtype=np.int32)
+    self._use_springiness_in_stance = use_springiness_in_stance
 
   def reset(self, current_time):
     del current_time
@@ -118,6 +128,20 @@ class TorqueStanceLegController(leg_controller.LegController):
   def update(self, current_time):
     del current_time
 
+  def AddRelaxation(self, contact_forces, foot_contact_states): 
+    foot_positions = self._robot.GetFootPositionsInBaseFrame()
+    foot_velocities = self._robot.GetFootVelocitiesInBaseFrame()
+    relaxed_contact_forces = contact_forces
+    for leg_id, force in contact_forces.items():
+      if self.last_foot_contact_states[leg_id]!=foot_contact_states[leg_id] and foot_contact_states[leg_id]: # start of contact
+        self.foot_positions_des = self._robot.GetFootPositionsInBaseFrame()*0.8
+        self.foot_velocities_des = [0]*4 
+
+      if foot_contact_states[leg_id]: # leg in contact      
+        relaxationPart = np.multiply(_KP,self.foot_positions_des[leg_id]-foot_positions[leg_id])+np.multiply(_KD,self.foot_velocities_des[leg_id]-foot_velocities[leg_id]) # _KP(p_des-p)+_KD(v_des-v)
+        relaxed_contact_forces[leg_id] = force + relaxationPart
+    return relaxed_contact_forces
+    
   def get_action(self):
     """Computes the torque for stance legs."""
     desired_com_position = np.array((0., 0., self._desired_body_height),
@@ -173,6 +197,9 @@ class TorqueStanceLegController(leg_controller.LegController):
       contact_forces[i] = np.array(
           predicted_contact_forces[i * _FORCE_DIMENSION:(i + 1) *
                                    _FORCE_DIMENSION])
+    if self._use_springiness_in_stance:
+      contact_forces = self.AddRelaxation(contact_forces, foot_contact_state) # ImpedanceControlInOperationSpace
+
     action = {}
     for leg_id, force in contact_forces.items():
       # While "Lose Contact" is useful in simulation, in real environment it's
@@ -184,4 +211,5 @@ class TorqueStanceLegController(leg_controller.LegController):
       for joint_id, torque in motor_torques.items():
         action[joint_id] = (0, 0, 0, 0, torque)
 
+    self.last_foot_contact_states = foot_contact_state
     return action, contact_forces

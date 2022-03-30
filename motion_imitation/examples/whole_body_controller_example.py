@@ -1,5 +1,5 @@
 """Example of whole body controller on A1 robot."""
-use_cMPC = False
+use_cMPC = True
 print_COT = True
 
 import os
@@ -167,7 +167,8 @@ def _setup_controller(robot):
       state_estimator,
       desired_speed=desired_speed,
       desired_twisting_speed=desired_twisting_speed,
-      desired_body_height=robot.MPC_BODY_HEIGHT
+      desired_body_height=robot.MPC_BODY_HEIGHT,
+      use_springiness_in_stance = True
       )
 
   controller = locomotion_controller.LocomotionController(

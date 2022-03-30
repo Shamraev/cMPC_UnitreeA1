@@ -272,6 +272,7 @@ class A1(minitaur.Minitaur):
         enable_action_interpolation=enable_action_interpolation,
         enable_action_filter=enable_action_filter,
         reset_time=reset_time)
+    self._lastFootPositionsInBaseFrame = self.GetFootPositionsInBaseFrame()
 
   def _LoadRobotURDF(self):
     a1_urdf_path = self.GetURDFFile()
@@ -500,6 +501,13 @@ class A1(minitaur.Minitaur):
     """Get the robot's foot position in the base frame."""
     motor_angles = self.GetMotorAngles()
     return foot_positions_in_base_frame(motor_angles)
+  
+  def GetFootVelocitiesInBaseFrame(self):
+    """Get the robot's foot velocity in the base frame."""
+    fp = self.GetFootPositionsInBaseFrame()
+    v = (fp-self._lastFootPositionsInBaseFrame)/self.time_step #??
+    self._lastFootPositionsInBaseFrame = fp 
+    return v
 
   def ComputeJacobian(self, leg_id):
     """Compute the Jacobian for a given leg."""

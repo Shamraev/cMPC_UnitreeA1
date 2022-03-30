@@ -37,6 +37,7 @@ class TorqueStanceLegController(leg_controller.LegController):
       desired_body_height: float = 0.45,
       num_legs: int = 4,
       friction_coeffs: Sequence[float] = (0.45, 0.45, 0.45, 0.45),
+      use_springiness_in_stance: bool = False
   ):
     """Initializes the class.
 
@@ -65,6 +66,7 @@ class TorqueStanceLegController(leg_controller.LegController):
     self._desired_body_height = desired_body_height
     self._num_legs = num_legs
     self._friction_coeffs = np.array(friction_coeffs)
+    self._use_springiness_in_stance = use_springiness_in_stance
 
   def reset(self, current_time):
     del current_time
