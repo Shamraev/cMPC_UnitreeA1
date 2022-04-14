@@ -677,8 +677,7 @@ std::vector<double> ConvexMpc::ComputeContactForces(
 
         desired_states_[i * kStateDim + 9] = desired_com_velocity[0];
         desired_states_[i * kStateDim + 10] = desired_com_velocity[1];
-        // Prefer to stablize the body height.
-        desired_states_[i * kStateDim + 11] = 0;
+        desired_states_[i * kStateDim + 11] = desired_com_velocity[2];
 
         desired_states_[i * kStateDim + 12] = -kGravity;
     }
