@@ -687,7 +687,7 @@ class Minitaur(object):
     )
     motors_per_leg = self.num_motors // self.num_legs
     com_dof = 6
-    return full_jacobian[com_dof + leg_id * motors_per_leg:com_dof +
+    return full_jacobian[:,com_dof + leg_id * motors_per_leg:com_dof +
                          (leg_id + 1) * motors_per_leg]
 
   def MapContactForceToJointTorques(self, leg_id, contact_force):
