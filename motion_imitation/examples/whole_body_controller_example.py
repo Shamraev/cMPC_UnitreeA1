@@ -1,5 +1,5 @@
 """Example of whole body controller on A1 robot."""
-use_cMPC = False
+use_cMPC = True
 print_COT = True
 
 import os
@@ -22,15 +22,14 @@ from pybullet_utils import bullet_client
 import pybullet  # pytype:disable=import-error
 
 from mpc_controller import com_velocity_estimator
-from mpc_controller import gait_generator as gait_generator_lib
+from mpc_controller import multiple_gait_generator
+from mpc_controller import gaits
 from mpc_controller import locomotion_controller
-from mpc_controller import openloop_gait_generator
 from mpc_controller import raibert_swing_leg_controller
 if use_cMPC:
   from mpc_controller import torque_stance_leg_controller
   import mpc_osqp
 else: from mpc_controller import torque_stance_leg_controller_quadprog as torque_stance_leg_controller
-
 
 from motion_imitation.robots import a1
 from motion_imitation.robots import robot_config
@@ -43,49 +42,11 @@ flags.DEFINE_bool("use_gamepad", False,
 flags.DEFINE_bool("use_real_robot", False,
                   "whether to use real robot or simulation")
 flags.DEFINE_bool("show_gui", True, "whether to show GUI.")
-flags.DEFINE_float("max_time_secs", 8*10., "maximum time to run the robot.")
+flags.DEFINE_float("max_time_secs", 15., "maximum time to run the robot.")
 FLAGS = flags.FLAGS
 
 _NUM_SIMULATION_ITERATION_STEPS = 300
 _MAX_TIME_SECONDS = 30.
-
-_STANCE_DURATION_SECONDS = [
-    0.3
-] * 4  # For faster trotting (v > 1.5 ms reduce this to 0.13s).
-
-# Standing
-# _DUTY_FACTOR = [1.] * 4
-# _INIT_PHASE_FULL_CYCLE = [0., 0., 0., 0.]
-
-# _INIT_LEG_STATE = (
-#     gait_generator_lib.LegState.STANCE,
-#     gait_generator_lib.LegState.STANCE,
-#     gait_generator_lib.LegState.STANCE,
-#     gait_generator_lib.LegState.STANCE,
-# )
-
-# Tripod
-# _DUTY_FACTOR = [.8] * 4
-# _INIT_PHASE_FULL_CYCLE = [0., 0.25, 0.5, 0.]
-
-# _INIT_LEG_STATE = (
-#     gait_generator_lib.LegState.STANCE,
-#     gait_generator_lib.LegState.STANCE,
-#     gait_generator_lib.LegState.STANCE,
-#     gait_generator_lib.LegState.SWING,
-# )
-
-# Trotting
-_DUTY_FACTOR = [0.6] * 4
-_INIT_PHASE_FULL_CYCLE = [0.9, 0, 0, 0.9]
-
-_INIT_LEG_STATE = (
-    gait_generator_lib.LegState.SWING,
-    gait_generator_lib.LegState.STANCE,
-    gait_generator_lib.LegState.STANCE,
-    gait_generator_lib.LegState.SWING,
-)
-
 
 def _generate_example_linear_angular_speed(t):
   """Creates an example speed profile based on time for demo purpose."""
@@ -105,11 +66,19 @@ def _generate_example_linear_angular_speed(t):
 
   return speed[0:3], speed[3], False
 
-def _generate_example_linear_speed(t):
-  vx = 0.5
+def _generate_example_constant_linear_speed(t):
+  vx = 1.2
+  vy = 0
+  vz = 0
+  wz = 0
+  return [vx,vy,vz],wz,False
 
-  time_points = (0, 2*0+0.01)
-  speed_points = ((0, 0, 0, 0), (vx, 0, 0, 0))
+def _generate_example_linear_speed(t):
+  vx = 1 #gait_generator._gait.SPEED
+
+  # walk trot_run 
+  time_points = (0, 3)
+  speed_points = ((vx, 0, 0, 0), (vx, 0, 0, 0))
 
   speed = scipy.interpolate.interp1d(time_points,
                                      speed_points,
@@ -118,24 +87,14 @@ def _generate_example_linear_speed(t):
                                      axis=0)(t)
   return speed[0:3], speed[3], False
 
-def _generate_example_constant_linear_speed(t):
-  vx = 1.2
-  vy = 0
-  vz = 0
-  wz = 0
-  return [vx,vy,vz],wz,False
-
 def _setup_controller(robot):
   """Demonstrates how to create a locomotion controller."""
   desired_speed = (0, 0)
   desired_twisting_speed = 0
 
-  gait_generator = openloop_gait_generator.OpenloopGaitGenerator(
+  gait_generator = multiple_gait_generator.MultipleGaitGenerator(
       robot,
-      stance_duration=_STANCE_DURATION_SECONDS,
-      duty_factor=_DUTY_FACTOR,
-      initial_leg_phase=_INIT_PHASE_FULL_CYCLE,
-      initial_leg_state=_INIT_LEG_STATE)
+      gaits.PRONK)
   window_size = 20 if not FLAGS.use_real_robot else 1
   state_estimator = com_velocity_estimator.COMVelocityEstimator(
       robot, window_size=window_size)
@@ -148,6 +107,7 @@ def _setup_controller(robot):
       desired_height=robot.MPC_BODY_HEIGHT,
       foot_clearance=0.01)
 
+  fullCycle = gait_generator.gait.STANCE_DURATION_SECONDS[0]/gait_generator.gait.DUTY_FACTOR[0] # fullCycle*DUTY_FACTOR = stance_duration --> fullCycle=stance_duration/DUTY_FACTOR
   if use_cMPC:
     st_controller = torque_stance_leg_controller.TorqueStanceLegController(
         robot,
@@ -158,7 +118,9 @@ def _setup_controller(robot):
         desired_body_height=robot.MPC_BODY_HEIGHT,    
         qp_solver = mpc_osqp.QPOASES, #or mpc_osqp.OSQP
         body_mass = robot.MPC_BODY_MASS,
-        body_inertia = robot.MPC_BODY_INERTIA
+        body_inertia = robot.MPC_BODY_INERTIA,
+        PLANNING_HORIZON_STEPS = 15, # 10
+        PLANNING_TIMESTEP = fullCycle/15    # 0.025
         )
   else:
     st_controller = torque_stance_leg_controller.TorqueStanceLegController(
@@ -181,6 +143,8 @@ def _setup_controller(robot):
 
 
 def _update_controller_params(controller, lin_speed, ang_speed):
+  # if lin_speed[0]>0.8:
+  #   controller.gait_generator.update_gait(gaits.TROT_RUN)
   controller.swing_leg_controller.desired_speed = lin_speed
   controller.swing_leg_controller.desired_twisting_speed = ang_speed
   controller.stance_leg_controller.desired_speed = lin_speed
@@ -263,6 +227,7 @@ def main(argv):
   current_time = start_time
   com_vels, imu_rates, actions = [], [], []
   E = 0
+  COT_started = False
   _SetCamera(p, robot)
   while current_time - start_time < FLAGS.max_time_secs:
     _MoveCameraAlongRobot(p,robot)
@@ -289,16 +254,19 @@ def main(argv):
 
     # COT
     if print_COT:
-      E = E + robot.GetEnergyConsumptionPerControlStep()
-      COT = E/(robot.MPC_BODY_MASS*9.8*robot.GetBasePosition()[0])
-      print("COT=",np.round(COT,2))
-      print("v=",robot.GetBaseVelocity()[0])
+      if current_time - start_time>3:
+        if not COT_started: start_x = robot.GetBasePosition()[0]; COT_started = True
+        E = E + robot.GetEnergyConsumptionPerControlStep()
+        x = robot.GetBasePosition()[0] - start_x
+        COT = E/(robot.MPC_BODY_MASS*9.8*x)
+        print("COT=",np.round(COT,2))
+        print("v=",robot.GetBaseVelocity()[0])
     if not FLAGS.use_real_robot:
       expected_duration = current_time - start_time_robot
       actual_duration = time.time() - start_time_wall
       if actual_duration < expected_duration:
         time.sleep(expected_duration - actual_duration)
-    print("actual_duration=", actual_duration)
+    #print("actual_duration=", actual_duration)
   if FLAGS.use_gamepad:
     gamepad.stop()
 

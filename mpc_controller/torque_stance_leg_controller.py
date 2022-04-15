@@ -68,7 +68,9 @@ class TorqueStanceLegController(leg_controller.LegController):
                                            0.25447),
       num_legs: int = 4,
       friction_coeffs: Sequence[float] = (0.45, 0.45, 0.45, 0.45),
-      qp_solver = convex_mpc.QPOASES
+      qp_solver = convex_mpc.QPOASES,
+      PLANNING_HORIZON_STEPS = 10,
+      PLANNING_TIMESTEP = 0.025
   ):
     """Initializes the class.
 
