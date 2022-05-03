@@ -48,6 +48,7 @@ FLAGS = flags.FLAGS
 
 _NUM_SIMULATION_ITERATION_STEPS = 300
 _MAX_TIME_SECONDS = 30.
+time_step = 0.002 # 0.025
 
 def _generate_example_linear_angular_speed(t):
   """Creates an example speed profile based on time for demo purpose."""
@@ -109,7 +110,6 @@ def _setup_controller(robot):
       foot_clearance=0.01)
 
   fullCycle = gait_generator.gait.STANCE_DURATION_SECONDS[0]/gait_generator.gait.DUTY_FACTOR[0] # fullCycle*DUTY_FACTOR = stance_duration --> fullCycle=stance_duration/DUTY_FACTOR
-  time_step = 0.025
   time_steps = int(fullCycle/time_step)
   if use_cMPC:
     st_controller = torque_stance_leg_controller.TorqueStanceLegController(
