@@ -638,15 +638,27 @@ std::vector<double> ConvexMpc::ComputeContactForces(
     // Now we can estimate the body height using the world frame foot positions
     // and contact states. We use simple averges leg height here.
     DCHECK_EQ(foot_contact_states.size(), num_legs_);
-    const double com_z =
-        com_position.size() == k3Dim
-        ? com_position[2]
-        : EstimateCoMHeightSimple(foot_positions_world_, foot_contact_states);
+    
+    double com_x = com_position[0];
+    double com_y = com_position[1];
+    double com_z = com_position[2];
+    if (com_position.size() != k3Dim) {
+        com_x = 0;
+        com_y = 0;
+        com_z = EstimateCoMHeightSimple(foot_positions_world_, foot_contact_states);
+    }
+
+
+    // const double com_z =
+    //     com_position.size() == k3Dim
+    //     ? com_position[2]
+    //     : EstimateCoMHeightSimple(foot_positions_world_, foot_contact_states);
 
     // In MPC planning we don't care about absolute position in the horizontal
     // plane.
-    const double com_x = 0;
-    const double com_y = 0;
+    // const double com_x = 0;
+    // const double com_y = 0;
+
 
     // Prepare the current and desired state vectors of length kStateDim *
     // planning_horizon.

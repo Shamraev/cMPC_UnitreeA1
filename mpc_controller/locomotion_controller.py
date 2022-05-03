@@ -85,7 +85,7 @@ class LocomotionController(object):
     """Returns the control ouputs (e.g. positions/torques) for all motors."""
     swing_action = self._swing_leg_controller.get_action()
     # start_time = time.time()
-    stance_action, qp_sol = self._stance_leg_controller.get_action()
+    stance_action, qp_sol, desired_com_position, desired_com_velocity = self._stance_leg_controller.get_action()
     # print(time.time() - start_time)
     action = []
     for joint_id in range(self._robot.num_motors):
@@ -96,4 +96,4 @@ class LocomotionController(object):
         action.extend(stance_action[joint_id])
     action = np.array(action, dtype=np.float32)
 
-    return action, dict(qp_sol=qp_sol)
+    return action, qp_sol,  desired_com_position, desired_com_velocity # dict(qp_sol=qp_sol)

@@ -186,4 +186,5 @@ class TorqueStanceLegController(leg_controller.LegController):
       for joint_id, torque in motor_torques.items():
         action[joint_id] = (0, 0, 0, 0, torque)
 
-    return action, contact_forces
+    return action, contact_forces, desired_com_position, desired_com_velocity
+

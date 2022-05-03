@@ -21,6 +21,7 @@ import pybullet_data
 from pybullet_utils import bullet_client
 import pybullet  # pytype:disable=import-error
 
+from mpc_controller import logger
 from mpc_controller import com_velocity_estimator
 from mpc_controller import multiple_gait_generator
 from mpc_controller import gaits
@@ -42,7 +43,7 @@ flags.DEFINE_bool("use_gamepad", False,
 flags.DEFINE_bool("use_real_robot", False,
                   "whether to use real robot or simulation")
 flags.DEFINE_bool("show_gui", True, "whether to show GUI.")
-flags.DEFINE_float("max_time_secs", 15., "maximum time to run the robot.")
+flags.DEFINE_float("max_time_secs", 5., "maximum time to run the robot.")
 FLAGS = flags.FLAGS
 
 _NUM_SIMULATION_ITERATION_STEPS = 300
@@ -108,6 +109,8 @@ def _setup_controller(robot):
       foot_clearance=0.01)
 
   fullCycle = gait_generator.gait.STANCE_DURATION_SECONDS[0]/gait_generator.gait.DUTY_FACTOR[0] # fullCycle*DUTY_FACTOR = stance_duration --> fullCycle=stance_duration/DUTY_FACTOR
+  time_step = 0.025
+  time_steps = int(fullCycle/time_step)
   if use_cMPC:
     st_controller = torque_stance_leg_controller.TorqueStanceLegController(
         robot,
@@ -119,8 +122,8 @@ def _setup_controller(robot):
         qp_solver = mpc_osqp.QPOASES, #or mpc_osqp.OSQP
         body_mass = robot.MPC_BODY_MASS,
         body_inertia = robot.MPC_BODY_INERTIA,
-        PLANNING_HORIZON_STEPS = 15, # 10
-        PLANNING_TIMESTEP = fullCycle/15    # 0.025
+        PLANNING_HORIZON_STEPS = time_steps, # 10
+        PLANNING_TIMESTEP = time_step    # 0.025
         )
   else:
     st_controller = torque_stance_leg_controller.TorqueStanceLegController(
@@ -197,17 +200,18 @@ def main(argv):
         pybullet_client=p,
         motor_control_mode=robot_config.MotorControlMode.HYBRID,
         enable_action_interpolation=False,
-        time_step=0.002,
+        time_step=time_step, # 0.002
         action_repeat=1)
   else:
     robot = a1.A1(p,
                   motor_control_mode=robot_config.MotorControlMode.HYBRID,
                   enable_action_interpolation=False,
                   reset_time=2,
-                  time_step=0.002,
+                  time_step=time_step, # 0.002
                   action_repeat=1)
 
   controller = _setup_controller(robot)
+  _logger = logger.Logger(robot, print_COT)
 
   controller.reset()
   if FLAGS.use_gamepad:
@@ -225,9 +229,6 @@ def main(argv):
 
   start_time = robot.GetTimeSinceReset()
   current_time = start_time
-  com_vels, imu_rates, actions = [], [], []
-  E = 0
-  COT_started = False
   _SetCamera(p, robot)
   while current_time - start_time < FLAGS.max_time_secs:
     _MoveCameraAlongRobot(p,robot)
@@ -243,24 +244,14 @@ def main(argv):
       break
     _update_controller_params(controller, lin_speed, ang_speed)
     controller.update()
-    hybrid_action, _ = controller.get_action() # hybrid_action, contact_forces =
+    hybrid_action, contact_force,  des_com_pos, des_com_vel = controller.get_action() # !! # DEBUG desired_com_position, desired_com_velocity
     #print("FootPositionsInBaseFrame: ",robot.GetFootPositionsInBaseFrame())
-    com_vels.append(np.array(robot.GetBaseVelocity()).copy())
-    imu_rates.append(np.array(robot.GetBaseRollPitchYawRate()).copy())
-    actions.append(hybrid_action)
+
+    if FLAGS.logdir: _logger.log(hybrid_action, contact_force, des_com_pos, des_com_vel)
+
     robot.Step(hybrid_action)
     current_time = robot.GetTimeSinceReset()
-    #real_torques.append(robot.GetMotorTorques())
 
-    # COT
-    if print_COT:
-      if current_time - start_time>3:
-        if not COT_started: start_x = robot.GetBasePosition()[0]; COT_started = True
-        E = E + robot.GetEnergyConsumptionPerControlStep()
-        x = robot.GetBasePosition()[0] - start_x
-        COT = E/(robot.MPC_BODY_MASS*9.8*x)
-        print("COT=",np.round(COT,2))
-        print("v=",robot.GetBaseVelocity()[0])
     if not FLAGS.use_real_robot:
       expected_duration = current_time - start_time_robot
       actual_duration = time.time() - start_time_wall
@@ -271,12 +262,7 @@ def main(argv):
     gamepad.stop()
 
   if FLAGS.logdir:
-    np.savez(os.path.join(logdir, 'action.npz'),
-             action=actions,
-             com_vels=com_vels,
-             imu_rates=imu_rates
-             #real_torques=real_torques
-             )
+    _logger.save_to(os.path.join(logdir, 'states.csv'))
     logging.info("logged to: {}".format(logdir))
 
 

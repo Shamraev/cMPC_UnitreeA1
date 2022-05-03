@@ -1,6 +1,6 @@
 """Gaits module."""
 # Tested on Unitree A1
-# Mostly those gaits are from Cheetah-Software
+# Most of the gaits is from Cheetah-Software
 
 import os
 import inspect
@@ -241,9 +241,11 @@ class TRAVERSE_GALLOP(Gait):
   CONTACT_DETECTION_PHASE_THRESHOLD = 0.1
 
 class PRONK(Gait): # COT = 1.16
+  # speed 1.0; STANCE_DURATION_SECONDS 0.2; DUTY_FACTOR 0.5; k 4000
+  # DUTY_FACTOR 0.45
   NAME = GaitType.PRONK
   SPEED = 1.0 # m/s
-  STANCE_DURATION_SECONDS = [0.25]*4
+  STANCE_DURATION_SECONDS = [0.2]*4 # DEFAULT: 0.25, good 0.2 for k=4000
   DUTY_FACTOR = [0.5]*4
   INIT_PHASE_FULL_CYCLE = [0.0, 0.0, 0.0, 0.0]
   INIT_LEG_STATE = (
