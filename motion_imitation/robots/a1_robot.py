@@ -159,6 +159,8 @@ class A1Robot(a1.A1):
     self._raw_state = None
     self._last_raw_state = None
     self._motor_angles = np.zeros(12)
+    self._motor_torques = np.zeros(12)
+    self._motor_temperature = np.zeros(12)
     self._motor_velocities = np.zeros(12)
     self._joint_states = None
     self._last_reset_time = time.time()
@@ -189,6 +191,10 @@ class A1Robot(a1.A1):
     self._motor_angles = np.array([motor.q for motor in state.motorState[:12]])
     self._motor_velocities = np.array(
         [motor.dq for motor in state.motorState[:12]])
+    self._motor_torques = np.array(
+        [motor.tauEst for motor in state.motorState[:12]])
+    self._motor_temperature = np.array(
+        [motor.temperature for motor in state.motorState[:12]])
     self._joint_states = np.array(
         list(zip(self._motor_angles, self._motor_velocities)))
     if self._init_complete:
@@ -202,6 +208,12 @@ class A1Robot(a1.A1):
       self._pybullet_client.resetJointState(self.quadruped, motor_id,
                                             motor_angles[i],
                                             motor_velocities[i])
+
+  def GetMotorTorques(self):
+    return self._motor_torques.copy()
+
+  def GetMotorTemperature(self):
+    return self._motor_temperature.copy()
 
   def GetTrueMotorAngles(self):
     return self._motor_angles.copy()
@@ -309,3 +321,12 @@ class A1Robot(a1.A1):
     self.ApplyAction(action, motor_control_mode)
     self.ReceiveObservation()
     self._state_action_counter += 1
+
+  def Shut_down(self):
+    # action = {}
+    # kd = 4
+    # for i in range(12):
+    #   action[i] = (0, 0, 0, kd, 0)
+    # self.Step(action)
+    # time.sleep(3)
+    return False

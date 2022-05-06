@@ -13,6 +13,7 @@ os.sys.path.insert(0, parentdir)
 import numpy as np
 import time
 from typing import Any, Callable
+from mpc_controller import logger
 
 class LocomotionController(object):
   """Generates the quadruped locomotion.
@@ -29,6 +30,7 @@ class LocomotionController(object):
       swing_leg_controller,
       stance_leg_controller,
       clock,
+      logdir,
   ):
     """Initializes the class.
 
@@ -49,6 +51,9 @@ class LocomotionController(object):
     self._state_estimator = state_estimator
     self._swing_leg_controller = swing_leg_controller
     self._stance_leg_controller = stance_leg_controller
+    self._logger = None
+    if logdir:
+      self._logger = logger.Logger(robot, False, logdir)
 
   @property
   def swing_leg_controller(self):
@@ -96,4 +101,7 @@ class LocomotionController(object):
         action.extend(stance_action[joint_id])
     action = np.array(action, dtype=np.float32)
 
-    return action, qp_sol,  desired_com_position, desired_com_velocity # dict(qp_sol=qp_sol)
+    if self._logger!=None:
+      self._logger.log(action, qp_sol, desired_com_position, desired_com_velocity, self.gait_generator.gait().NAME)
+
+    return action

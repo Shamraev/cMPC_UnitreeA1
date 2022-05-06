@@ -506,3 +506,10 @@ class A1(minitaur.Minitaur):
     # Does not work for Minitaur which has the four bar mechanism for now.
     motor_angles = self.GetMotorAngles()[leg_id * 3:(leg_id + 1) * 3]
     return analytical_leg_jacobian(motor_angles, leg_id)
+  
+  def GetMotorTemperature(self):
+    return -1
+  
+  def Shut_down(self):
+    return True
+

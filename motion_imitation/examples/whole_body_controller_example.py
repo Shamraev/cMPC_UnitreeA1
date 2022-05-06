@@ -11,7 +11,6 @@ os.sys.path.insert(0, parentdir)
 from absl import app
 from absl import flags
 from absl import logging
-from datetime import datetime
 import numpy as np
 import os
 import scipy.interpolate
@@ -21,7 +20,6 @@ import pybullet_data
 from pybullet_utils import bullet_client
 import pybullet  # pytype:disable=import-error
 
-from mpc_controller import logger
 from mpc_controller import com_velocity_estimator
 from mpc_controller import multiple_gait_generator
 from mpc_controller import gaits
@@ -37,7 +35,7 @@ from motion_imitation.robots import robot_config
 from motion_imitation.robots.gamepad import gamepad_reader
 
 flags.DEFINE_bool("record_video", False, "Record video")
-flags.DEFINE_string("logdir", None, "where to log trajectories.")
+flags.DEFINE_string("logdir", 'logs', "where to log trajectories.")
 flags.DEFINE_bool("use_gamepad", False,
                   "whether to use gamepad to provide control input.")
 flags.DEFINE_bool("use_real_robot", False,
@@ -96,7 +94,7 @@ def _setup_controller(robot):
 
   gait_generator = multiple_gait_generator.MultipleGaitGenerator(
       robot,
-      gaits.PRONK)
+      gaits.STAND)
   window_size = 20 if not FLAGS.use_real_robot else 1
   state_estimator = com_velocity_estimator.COMVelocityEstimator(
       robot, window_size=window_size)
@@ -110,7 +108,6 @@ def _setup_controller(robot):
       foot_clearance=0.01)
 
   fullCycle = gait_generator.gait.STANCE_DURATION_SECONDS[0]/gait_generator.gait.DUTY_FACTOR[0] # fullCycle*DUTY_FACTOR = stance_duration --> fullCycle=stance_duration/DUTY_FACTOR
-  time_steps = int(fullCycle/time_step)
   if use_cMPC:
     st_controller = torque_stance_leg_controller.TorqueStanceLegController(
         robot,
@@ -122,8 +119,8 @@ def _setup_controller(robot):
         qp_solver = mpc_osqp.QPOASES, #or mpc_osqp.OSQP
         body_mass = robot.MPC_BODY_MASS,
         body_inertia = robot.MPC_BODY_INERTIA,
-        PLANNING_HORIZON_STEPS = time_steps, # 10
-        PLANNING_TIMESTEP = time_step    # 0.025
+        PLANNING_HORIZON_STEPS = 10, #10,
+        PLANNING_TIMESTEP = 0.025, #0.025
         )
   else:
     st_controller = torque_stance_leg_controller.TorqueStanceLegController(
@@ -141,7 +138,8 @@ def _setup_controller(robot):
       state_estimator=state_estimator,
       swing_leg_controller=sw_controller,
       stance_leg_controller=st_controller,
-      clock=robot.GetTimeSinceReset)
+      clock=robot.GetTimeSinceReset,
+      logdir=FLAGS.logdir)
   return controller
 
 
@@ -154,6 +152,7 @@ def _update_controller_params(controller, lin_speed, ang_speed):
   controller.stance_leg_controller.desired_twisting_speed = ang_speed
 
 def _MoveCameraAlongRobot(p, robot):
+  if FLAGS.use_real_robot: return None
   # for moving the camera with the robot
   cubePos = robot.GetBasePosition()
   cubePos = (cubePos[0], cubePos[1], robot.MPC_BODY_HEIGHT)
@@ -166,13 +165,19 @@ def _MoveCameraAlongRobot(p, robot):
 def _SetCamera(p, robot):
   _MoveCameraAlongRobot(p, robot)
 
+def close(gamepad,controller, robot):
+  robot.Shut_down()
+  del robot
+  del controller
+  if FLAGS.use_gamepad:
+    gamepad.stop() 
 
 def main(argv):
   """Runs the locomotion controller example."""
   del argv # unused
 
   # Construct simulator
-  if FLAGS.record_video or True:
+  if FLAGS.record_video and not FLAGS.use_real_robot:
     p = pybullet
     p.connect(p.GUI, options="--width=1280 --height=720 --mp4=\"test.mp4\" --mp4fps=24")
     p.configureDebugVisualizer(p.COV_ENABLE_GUI,0)
@@ -200,18 +205,18 @@ def main(argv):
         pybullet_client=p,
         motor_control_mode=robot_config.MotorControlMode.HYBRID,
         enable_action_interpolation=False,
-        time_step=time_step, # 0.002
+        time_step= 0.002, #time_step
         action_repeat=1)
   else:
     robot = a1.A1(p,
                   motor_control_mode=robot_config.MotorControlMode.HYBRID,
                   enable_action_interpolation=False,
                   reset_time=2,
-                  time_step=time_step, # 0.002
-                  action_repeat=1)
+                  time_step=0.002, # time_step
+                  action_repeat=1
+                  )     
 
   controller = _setup_controller(robot)
-  _logger = logger.Logger(robot, print_COT)
 
   controller.reset()
   if FLAGS.use_gamepad:
@@ -222,48 +227,41 @@ def main(argv):
     command_function = _generate_example_linear_speed
     #command_function = _generate_example_constant_linear_speed
 
-  if FLAGS.logdir:
-    logdir = os.path.join(FLAGS.logdir,
-                          datetime.now().strftime('%Y_%m_%d_%H_%M_%S'))
-    os.makedirs(logdir)
-
   start_time = robot.GetTimeSinceReset()
   current_time = start_time
   _SetCamera(p, robot)
-  while current_time - start_time < FLAGS.max_time_secs:
-    _MoveCameraAlongRobot(p,robot)
-    
-    #time.sleep(0.0008) #on some fast computer, works better with sleep on real A1?
-    start_time_robot = current_time
-    start_time_wall = time.time()
-    # Updates the controller behavior parameters.
-    lin_speed, ang_speed, e_stop = command_function(current_time)
-    # print(lin_speed)
-    if e_stop:
-      logging.info("E-stop kicked, exiting...")
-      break
-    _update_controller_params(controller, lin_speed, ang_speed)
-    controller.update()
-    hybrid_action, contact_force,  des_com_pos, des_com_vel = controller.get_action() # !! # DEBUG desired_com_position, desired_com_velocity
-    #print("FootPositionsInBaseFrame: ",robot.GetFootPositionsInBaseFrame())
+  try:  
+    while current_time - start_time < FLAGS.max_time_secs:
+      _MoveCameraAlongRobot(p,robot)
+      
+      #time.sleep(0.0008) #on some fast computer, works better with sleep on real A1?
+      #time.sleep(0.002)
+      start_time_robot = current_time
+      start_time_wall = time.time()
+      # Updates the controller behavior parameters.
+      lin_speed, ang_speed, e_stop = command_function(current_time)
+      # print(lin_speed)
+      if e_stop:
+        logging.info("E-stop kicked, exiting...")
+        break
+      _update_controller_params(controller, lin_speed, ang_speed)
+      controller.update()
+      hybrid_action = controller.get_action() # !! # DEBUG desired_com_position, desired_com_velocity
+      #print("FootPositionsInBaseFrame: ",robot.GetFootPositionsInBaseFrame())
 
-    if FLAGS.logdir: _logger.log(hybrid_action, contact_force, des_com_pos, des_com_vel)
+      robot.Step(hybrid_action)
+      current_time = robot.GetTimeSinceReset()
 
-    robot.Step(hybrid_action)
-    current_time = robot.GetTimeSinceReset()
-
-    if not FLAGS.use_real_robot:
-      expected_duration = current_time - start_time_robot
-      actual_duration = time.time() - start_time_wall
-      if actual_duration < expected_duration:
-        time.sleep(expected_duration - actual_duration)
-    #print("actual_duration=", actual_duration)
-  if FLAGS.use_gamepad:
-    gamepad.stop()
-
-  if FLAGS.logdir:
-    _logger.save_to(os.path.join(logdir, 'states.csv'))
-    logging.info("logged to: {}".format(logdir))
+      print('dt',time.time() - start_time_wall)
+      if not FLAGS.use_real_robot:
+        expected_duration = current_time - start_time_robot
+        actual_duration = time.time() - start_time_wall
+        if actual_duration < expected_duration:
+          time.sleep(expected_duration - actual_duration)
+      #print("actual_duration=", actual_duration)
+      close(gamepad, controller, robot)
+  except KeyboardInterrupt:
+    close(gamepad, controller, robot)
 
 
 if __name__ == "__main__":

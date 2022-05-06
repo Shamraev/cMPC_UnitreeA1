@@ -25,7 +25,8 @@ class GaitType(enum.Enum):
   TRAVERSE_GALLOP = 9
   PRONK = 10
   CUSTOM = 11
-  TRANSITION_TO_STAND = 12 
+  TRANSITION_TO_STAND = 12
+  TRIPOD = 13 
 
 class Gait(object):
   NAME = GaitType.STAND
@@ -55,20 +56,20 @@ class STAND(Gait):
   )
   CONTACT_DETECTION_PHASE_THRESHOLD = 0.1
 
-# # were in this repo: Tripod
-# class STATIC_WALK(Gait):
-#   NAME = GaitType.STATIC_WALK
-#   SPEED = 0.5 # m/s
-#   STANCE_DURATION_SECONDS = [0.8]*4
-#   DUTY_FACTOR = [0.8]*4
-#   INIT_PHASE_FULL_CYCLE = [0., 0.25, 0.5, 0.]
-#   INIT_LEG_STATE = (
-#       gait_generator.LegState.STANCE,
-#       gait_generator.LegState.STANCE,
-#       gait_generator.LegState.STANCE,
-#       gait_generator.LegState.SWING,
-#   )
-#   CONTACT_DETECTION_PHASE_THRESHOLD = 0.1
+# were in this repo: Tripod
+class TRIPOD(Gait):
+  NAME = GaitType.TRIPOD
+  SPEED = 0.5 # m/s
+  STANCE_DURATION_SECONDS = [0.3]*4
+  DUTY_FACTOR = [0.8]*4
+  INIT_PHASE_FULL_CYCLE = [0., 0.25, 0.5, 0.]
+  INIT_LEG_STATE = (
+      gait_generator.LegState.STANCE,
+      gait_generator.LegState.STANCE,
+      gait_generator.LegState.STANCE,
+      gait_generator.LegState.SWING,
+  )
+  CONTACT_DETECTION_PHASE_THRESHOLD = 0.1
 
 class STATIC_WALK(Gait):
   NAME = GaitType.STATIC_WALK
