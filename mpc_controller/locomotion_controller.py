@@ -53,7 +53,7 @@ class LocomotionController(object):
     self._stance_leg_controller = stance_leg_controller
     self._logger = None
     if logdir:
-      self._logger = logger.Logger(robot, False, logdir)
+      self._logger = logger.Logger(robot, True, logdir)
 
   @property
   def swing_leg_controller(self):

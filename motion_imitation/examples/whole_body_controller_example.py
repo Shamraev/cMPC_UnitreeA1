@@ -94,7 +94,7 @@ def _setup_controller(robot):
 
   gait_generator = multiple_gait_generator.MultipleGaitGenerator(
       robot,
-      gaits.STAND)
+      gaits.PRONK)
   window_size = 20 if not FLAGS.use_real_robot else 1
   state_estimator = com_velocity_estimator.COMVelocityEstimator(
       robot, window_size=window_size)
@@ -219,6 +219,7 @@ def main(argv):
   controller = _setup_controller(robot)
 
   controller.reset()
+  gamepad = None
   if FLAGS.use_gamepad:
     gamepad = gamepad_reader.Gamepad()
     command_function = gamepad.get_command
@@ -252,7 +253,6 @@ def main(argv):
       robot.Step(hybrid_action)
       current_time = robot.GetTimeSinceReset()
 
-      print('dt',time.time() - start_time_wall)
       if not FLAGS.use_real_robot:
         expected_duration = current_time - start_time_robot
         actual_duration = time.time() - start_time_wall
