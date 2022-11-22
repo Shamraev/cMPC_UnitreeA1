@@ -133,7 +133,8 @@ class TorqueStanceLegController(leg_controller.LegController):
       friction_coeffs: Sequence[float] = (0.45, 0.45, 0.45, 0.45),
       qp_solver = convex_mpc.QPOASES,
       PLANNING_HORIZON_STEPS = 10,
-      PLANNING_TIMESTEP = 0.025
+      PLANNING_TIMESTEP = 0.025,
+      USE_SLIP = False
   ):
     """Initializes the class.
 
@@ -153,6 +154,7 @@ class TorqueStanceLegController(leg_controller.LegController):
       num_legs: The number of legs used for force planning.
       friction_coeffs: The friction coeffs on the contact surfaces.
     """
+    self._USE_SLIP = USE_SLIP
     self._robot = robot
     self._gait_generator = gait_generator
     self._state_estimator = state_estimator
@@ -250,7 +252,7 @@ class TorqueStanceLegController(leg_controller.LegController):
       self._SLIP.started_cycle = False
 
     #
-    if self._SLIP.started_cycle:
+    if self._USE_SLIP and self._SLIP.started_cycle:
       z, x = self._SLIP.get_traj()
       desired_com_position[2] = z[0]
       desired_com_velocity[2] = z[1]

@@ -93,3 +93,54 @@ class Logger:
         'COT': self._COT,
         't': self._t}
     pd.DataFrame(data=d).to_csv(os.path.join(logdir, 'states.csv'))
+
+
+
+
+    ## from Convex_mpc_untreeA1 repo. logging with pickle.
+    # TODO: rename gait name to gait type. remove csv, npz saving 
+    # (csv for plotjuggler, but do I need it? from pkl file I can make csv for Plotjuggler)
+    
+
+
+  # def __init__(self,
+  #              use_real_robot: bool = False,
+  #              show_gui: bool = False,
+  #              logdir: str = 'logs/'):
+
+  # self._logs = []
+  # self._logdir = logdir
+
+  # def _start_logging(self):
+  #   self._logs = []
+
+  #     def _update_logging(self, action, qp_sol):
+  #   frame = dict(
+  #       desired_speed=(self._swing_controller.desired_speed,
+  #                      self._swing_controller.desired_twisting_speed),
+  #       timestamp=self._time_since_reset,
+  #       base_rpy=self._robot.base_orientation_rpy,
+  #       motor_angles=self._robot.motor_angles,
+  #       base_vel=self._robot.motor_velocities,
+  #       base_vels_body_frame=self._state_estimator.com_velocity_body_frame,
+  #       base_rpy_rate=self._robot.base_rpy_rate,
+  #       motor_vels=self._robot.motor_velocities,
+  #       motor_torques=self._robot.motor_torques,
+  #       contacts=self._robot.foot_contacts,
+  #       desired_grf=qp_sol,
+  #       robot_action=action,
+  #       gait_generator_phase=self._gait_generator.current_phase.copy(),
+  #       gait_generator_state=self._gait_generator.leg_state,
+  #       ground_orientation=self._state_estimator.
+  #       ground_orientation_world_frame,
+  #   )
+  #   self._logs.append(frame)
+
+  # def _flush_logging(self):
+  #   if not os.path.exists(self._logdir):
+  #     os.makedirs(self._logdir)
+  #   filename = 'log_{}.pkl'.format(
+  #       datetime.now().strftime('%Y_%m_%d_%H_%M_%S'))
+  #   pickle.dump(self._logs, open(os.path.join(self._logdir, filename), 'wb'))
+  #   logging.info("Data logged to: {}".format(
+  #       os.path.join(self._logdir, filename)))

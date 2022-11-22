@@ -1,6 +1,7 @@
 """Example of whole body controller on A1 robot."""
 use_cMPC = True
 print_COT = True
+USE_SLIP = True
 
 import os
 import inspect
@@ -41,7 +42,7 @@ flags.DEFINE_bool("use_gamepad", False,
 flags.DEFINE_bool("use_real_robot", False,
                   "whether to use real robot or simulation")
 flags.DEFINE_bool("show_gui", True, "whether to show GUI.")
-flags.DEFINE_float("max_time_secs", 5., "maximum time to run the robot.")
+flags.DEFINE_float("max_time_secs", 10., "maximum time to run the robot.")
 FLAGS = flags.FLAGS
 
 _NUM_SIMULATION_ITERATION_STEPS = 300
@@ -120,7 +121,8 @@ def _setup_controller(robot):
         body_mass = robot.MPC_BODY_MASS,
         body_inertia = robot.MPC_BODY_INERTIA,
         PLANNING_HORIZON_STEPS = 10, #10,
-        PLANNING_TIMESTEP = 0.025, #0.025
+        PLANNING_TIMESTEP = 0.025, #0.025,
+        USE_SLIP = USE_SLIP
         )
   else:
     st_controller = torque_stance_leg_controller.TorqueStanceLegController(
@@ -179,14 +181,14 @@ def main(argv):
   # Construct simulator
   if FLAGS.record_video and not FLAGS.use_real_robot:
     p = pybullet
-    p.connect(p.GUI, options="--width=1280 --height=720 --mp4=\"test.mp4\" --mp4fps=24")
+    p.connect(p.GUI, options="--width=1280 --height=720 --mp4=\"video.mp4\" --mp4fps=24")
     p.configureDebugVisualizer(p.COV_ENABLE_GUI,0)
     #p.configureDebugVisualizer(p.COV_ENABLE_SINGLE_STEP_RENDERING,1) # it doesn't work on my computer
 
     # another variant:
     #p = pybullet
     #p.connect(p.GUI)
-    #p.startStateLogging(p.STATE_LOGGING_VIDEO_MP4, "test.mp4")
+    #p.startStateLogging(p.STATE_LOGGING_VIDEO_MP4, "video.mp4")
   elif FLAGS.show_gui and not FLAGS.use_real_robot:
     p = bullet_client.BulletClient(connection_mode=pybullet.GUI)
   else:
