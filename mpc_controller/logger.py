@@ -63,37 +63,23 @@ class Logger:
     self._t.append(self._robot.GetTimeSinceReset())
 
   def save_to(self, logdir):
-    np.savez(os.path.join(logdir, 'states_all.npz'),
-            motor_temp=self._motor_temp,
+    np.savez(os.path.join(logdir, 'states.npz'),
+            t=self._t,
             com_posns=self._com_posns,
             com_vels=self._com_vels,
-            imu_rates=self._imu_rates,
-            actions=self._actions,
-            contact_forces=self._contact_forces,
-            legs_states=self._legs_states, 
             des_com_posns=self._des_com_posns,
             des_com_vels=self._des_com_vels,
+            legs_states=self._legs_states, 
+            contact_forces=self._contact_forces, # computed forces from MPC
             E_i=self._E_i,
             COT=self._COT,
-            #real_torques.append(elf._robot.GetMotorTorques())
-            gait_name=self._gait_name,
-            t=self._t
-             )
 
-    d = {
-        #'action': actions, 
-        #'com_vels': com_vels,
-        #'imu_rates': imu_rates,
-        'contact_force_z': [row[0][0] for row in self._contact_forces], #contact_force[0][2],
-        'legs_state': [int(row[0]) for row in self._legs_states], #robot.GetFootContacts()[0],
-        'com_pos_z': [row[2] for row in self._com_posns], #robot.GetBasePosition()[2],
-        'com_vel_z': [row[2] for row in self._com_vels], #robot.GetBaseVelocity()[2],
-        'des_com_pos_z': [row[2] for row in self._des_com_posns], #float(desired_com_position[2]),
-        'des_com_vel_z': [row[2] for row in self._des_com_vels],#float(desired_com_velocity[2]),
-        'COT': self._COT,
-        't': self._t}
-    pd.DataFrame(data=d).to_csv(os.path.join(logdir, 'states.csv'))
-
+            actions=self._actions,                # computed torques (desired torques)
+            #real_torques.append(elf._robot.GetMotorTorques()),
+            motor_temp=self._motor_temp,
+            imu_rates=self._imu_rates,
+            gait_name=self._gait_name           
+            )
 
 
 
