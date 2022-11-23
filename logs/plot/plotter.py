@@ -11,8 +11,8 @@ currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentfram
 parentdir = os.path.dirname(os.path.dirname(currentdir))
 os.sys.path.insert(0, parentdir)
 
-Tstart = 5.05
-Tend = 6
+Tstart = 5.11
+Tend = 5.91
 
 ## clear and make directory for plots saving
 fig_dir = 'fig'
@@ -22,80 +22,122 @@ except:
     ok = 'ok'
 os.makedirs(fig_dir, exist_ok=True)
 
-## read from npz
+
+def plot_main_res(data):
+    i1=np.where(data['t']==Tstart)[0][0]
+    i2=np.where(data['t']==Tend)[0][0]
+
+    t = data['t'][i1:i2]
+    actions = data['actions'][i1:i2]
+    E_i = data['E_i'][i1:i2]
+    gait_name = data['gait_name'][i1:i2]
+    imu_rates = data['imu_rates'][i1:i2]
+    motor_temp = data['motor_temp'][i1:i2]
+    com_vels = data['com_vels'][i1:i2]
+    com_posns = data['com_posns'][i1:i2]
+    legs_states = data['legs_states'][i1:i2]
+    contactFR = np.array([row[0] for row in legs_states])
+    des_com_posns = data['des_com_posns'][i1:i2]
+    des_com_vels = data['des_com_vels'][i1:i2]
+    contact_forces = data['contact_forces'][i1:i2]
+
+    fig, (ax1, ax2, ax3, ax4) = plt.subplots(4, figsize=(8,7), sharex=True)
+
+    ## plot force for front right leg
+    f=[row[0] for row in contact_forces]
+    fx = [row[0] for row in f]; fy = [row[1] for row in f]; fz = [row[2] for row in f] 
+    ax1.plot(t, fx, linestyle='--', label='Fx') 
+    ax1.plot(t, fy, linestyle='-.', label='Fy') 
+    ax1.plot(t, fz, linestyle='-', label='Fz') 
+
+
+    ax1.set_ylabel('Force (N)')
+    ax1.set_title('Computed force for FR leg')
+    ax1.fill_between(x=t, y1=ax1.get_ylim()[0],y2=ax1.get_ylim()[1], where=contactFR>0,color='gray', alpha=0.2)
+    ax1.legend(bbox_to_anchor=(1,1), loc="upper left")
+    ax1.grid()
+    # ax1.savefig(fig_dir+'/forceZ.eps', dpi=400)
+    # ax1.show()
+
+    # f=[row[0] for row in contact_forces]
+    # fz=[row[1] for row in f]
+    # plt.plot(t, fz, label = "contact_force_z"); plt.xlabel('Time (sec)'); plt.ylabel('Force (N)')
+    # plt.title('Computed force for FR leg vs Time')
+    # #plt.legend()
+    # plt.grid()
+    # plt.savefig(fig_dir+'/forceZ.eps', dpi=400)
+    # plt.show()
+
+    ## plot CoM z
+    des_com_pos_z = [row[2] for row in des_com_posns]
+    com_pos_z=[row[2] for row in com_posns]
+    ax2.plot(t, com_pos_z, label = "CoM z")
+    ax2.plot(t, des_com_pos_z, label = "Des CoM z"); ax2.set_ylabel('CoM z (m)')
+    ax2.set_title('CoM z')
+    ax2.fill_between(x=t, y1=ax2.get_ylim()[0],y2=ax2.get_ylim()[1], where=contactFR>0,color='gray', alpha=0.2)
+    ax2.legend(bbox_to_anchor=(1,1), loc="upper left")
+    ax2.grid()
+
+    ## plot CoM z_dot 
+    des_com_vel_z = [row[2] for row in des_com_vels]
+    com_vel_z=[row[2] for row in com_vels]
+    ax3.plot(t, com_vel_z, label = "CoM z vel")
+    ax3.plot(t, des_com_vel_z, label = "Des CoM z vel");  ax3.set_ylabel('CoM z velocity (m/s)')
+    ax3.set_title('CoM z velocity')
+    ax3.fill_between(x=t, y1=ax3.get_ylim()[0],y2=ax3.get_ylim()[1], where=contactFR>0,color='gray', alpha=0.2)
+    ax3.legend(bbox_to_anchor=(1,1), loc="upper left")
+    ax3.grid()
+
+    ## plot CoM des_x_dot
+    des_com_vel_x = [row[0] for row in des_com_vels]
+    com_vel_x=[row[0] for row in com_vels]
+    ax4.plot(t, com_vel_x, label = "CoM x vel")
+    ax4.plot(t, des_com_vel_x, label = "Des CoM x vel"); ax4.set_xlabel('Time (sec)'); ax4.set_ylabel('CoM x velocity (m/s)')
+    ax4.set_title('CoM x velocity')
+    ax4.fill_between(x=t, y1=ax4.get_ylim()[0],y2=ax4.get_ylim()[1], where=contactFR>0,color='gray', alpha=0.2)
+    ax4.legend(bbox_to_anchor=(1,1), loc="upper left")
+    ax4.grid()
+
+    ax4.set_xlabel('Time (sec)')
+
+    fig.tight_layout()
+    return fig
+
+def plot_energy_comparision(data, dataSLIP):
+    i1=np.where(data['t']==Tstart)[0][0]
+    i2=np.where(data['t']==Tend)[0][0]
+
+    t = data['t'][i1:i2]
+    E_i = data['E_i'][i1:i2]
+    E_i_SLIP = dataSLIP['E_i'][i1:i2]
+    legs_states = data['legs_states'][i1:i2]
+    contactFR = np.array([row[0] for row in legs_states])
+
+    fig, ax1 = plt.subplots(1)
+
+    ax1.plot(t, E_i, label='dE Without SLIP')
+    ax1.plot(t, E_i_SLIP, label='dE With SLIP');  
+    ax1.set_xlabel('Time (sec)'); ax1.set_ylabel('Energy in each step dt (J)')
+    ax1.set_title('Energy')
+    ax1.fill_between(x=t, y1=ax1.get_ylim()[0],y2=ax1.get_ylim()[1], where=contactFR>0,color='gray', alpha=0.2)
+    ax1.legend(bbox_to_anchor=(1,1), loc="upper left")
+    ax1.grid()
+    ax1.set_xlabel('Time (sec)')
+
+    fig.tight_layout()
+    return fig
+
 
 data = np.load('states.npz', allow_pickle=True)
+fig = plot_main_res(data)
+fig.savefig(fig_dir+'/results_without_SLIP.eps', dpi=500)
+dataSLIP = np.load('statesSLIP.npz', allow_pickle=True)
+fig = plot_main_res(dataSLIP)
+fig.savefig(fig_dir+'/results_with_SLIP.eps', dpi=500)
 
-i1=np.where(data['t']==Tstart)[0][0]
-i2=np.where(data['t']==Tend)[0][0]
+fig = plot_energy_comparision(data, dataSLIP)
+fig.savefig(fig_dir+'/energy_comparision.eps', dpi=500)
 
-t = data['t'][i1:i2]
-actions = data['actions'][i1:i2]
-E_i = data['E_i'][i1:i2]
-gait_name = data['gait_name'][i1:i2]
-imu_rates = data['imu_rates'][i1:i2]
-motor_temp = data['motor_temp'][i1:i2]
-com_vels = data['com_vels'][i1:i2]
-com_posns = data['com_posns'][i1:i2]
-legs_states = data['legs_states'][i1:i2]
-contactFR = np.array([row[0] for row in legs_states])
-des_com_posns = data['des_com_posns'][i1:i2]
-des_com_vels = data['des_com_vels'][i1:i2]
-contact_forces = data['contact_forces'][i1:i2]
-
-## plot force for front right leg
-f=[row[0] for row in contact_forces]
-fx = [row[0] for row in f]; fy = [row[1] for row in f]; fz = [row[2] for row in f] 
-plt.plot(t, fx, linestyle='--', label='Fx') 
-plt.plot(t, fy, linestyle='-.', label='Fy') 
-plt.plot(t, fz, linestyle='-', label='Fz') 
-
-
-plt.xlabel('Time (sec)'); plt.ylabel('Force (N)')
-plt.title('Computed force for FR leg vs Time')
-plt.fill_between(x=t, y1=plt.ylim()[0],y2=plt.ylim()[1], where=contactFR>0,color='green', alpha=0.2)
-plt.legend()
-plt.grid()
-plt.savefig(fig_dir+'/forceZ.eps', dpi=400)
-plt.show()
-
-# f=[row[0] for row in contact_forces]
-# fz=[row[1] for row in f]
-# plt.plot(t, fz, label = "contact_force_z"); plt.xlabel('Time (sec)'); plt.ylabel('Force (N)')
-# plt.title('Computed force for FR leg vs Time')
-# #plt.legend()
-# plt.grid()
-# plt.savefig(fig_dir+'/forceZ.eps', dpi=400)
-# plt.show()
-
-## plot CoM z, z_dot 
-des_com_vel_z = [row[2] for row in des_com_vels]
-com_vel_z=[row[2] for row in com_vels]
-plt.plot(t, com_vel_z, label = "com_vel_z")
-plt.plot(t, des_com_vel_z, label = "des_com_vel_z"); plt.xlabel('Time (sec)'); plt.ylabel('CoM z velocity (m/s)')
-plt.title('CoM z velocity vs Time')
-plt.fill_between(x=t, y1=plt.ylim()[0],y2=plt.ylim()[1], where=contactFR>0,color='green', alpha=0.2)
-plt.legend()
-plt.grid()
-plt.show()
-
-## plot CoM x_dot,  des_x_dot
-des_com_vel_x = [row[0] for row in des_com_vels]
-com_vel_x=[row[0] for row in com_vels]
-plt.plot(t, com_vel_x, label = "com_vel_x")
-plt.plot(t, des_com_vel_x, label = "des_com_vel_x"); plt.xlabel('Time (sec)'); plt.ylabel('CoM x velocity (m/s)')
-plt.title('CoM x velocity vs Time')
-plt.fill_between(x=t, y1=plt.ylim()[0],y2=plt.ylim()[1], where=contactFR>0,color='green', alpha=0.2)
-plt.legend()
-plt.grid()
-plt.show()
-
-plt.plot(t, E_i); plt.xlabel('time (sec)'); plt.ylabel('Energy in each step (J)')
-plt.title('Energy vs time')
-plt.fill_between(x=t, y1=plt.ylim()[0],y2=plt.ylim()[1], where=contactFR>0,color='green', alpha=0.2)
-#plt.legend()
-plt.grid()
-plt.show()
 
 # plt.plot(t, actions[:,0]); plt.xlabel('time (sec)'); plt.ylabel('commanded torques (Nm)')
 # plt.title('commanded torques vs time')
