@@ -1,7 +1,7 @@
 """Example of whole body controller on A1 robot."""
 use_cMPC = True
 print_COT = True
-USE_SLIP = True
+USE_SLIP = False
 
 import os
 import inspect

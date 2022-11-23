@@ -13,7 +13,7 @@ class Logger:
   def __init__(self, robot, print_COT, logdir):
     self._com_posns,self._com_vels,self._imu_rates,self._actions,self._contact_forces = [],[],[],[],[]
     self._legs_states,self._des_com_posns,self._des_com_vels,self._COT,self._t = [],[],[],[],[]
-    self._E_i,self._motor_temp,self._gait_name = [],[],[]
+    self._E_i,self._motor_temp,self._gait_name, self._footPositionsInBaseFrame = [],[],[],[]
     self._E = 0
     self._COT_started = False
     self._print_COT = print_COT
@@ -51,6 +51,7 @@ class Logger:
     self._com_posns.append(np.array(self._robot.GetBasePosition()))
     self._com_vels.append(np.array(self._robot.GetBaseVelocity()).copy())
     self._imu_rates.append(np.array(self._robot.GetBaseRollPitchYawRate()).copy())
+    self._footPositionsInBaseFrame.append(np.array(self._robot.GetFootPositionsInBaseFrame()))
     self._actions.append(hybrid_action)
     self._contact_forces.append(contact_force)
     self._legs_states.append(self._robot.GetFootContacts()) 
@@ -70,6 +71,7 @@ class Logger:
             des_com_posns=self._des_com_posns,
             des_com_vels=self._des_com_vels,
             legs_states=self._legs_states, 
+            footPositionsInBaseFrame=self._footPositionsInBaseFrame,
             contact_forces=self._contact_forces, # computed forces from MPC
             E_i=self._E_i,
             COT=self._COT,

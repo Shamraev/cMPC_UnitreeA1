@@ -43,6 +43,7 @@ def plot_main_res(data, Tstart, Tend):
     ## plot force for front right leg
     f=[row[0] for row in contact_forces]
     fx = [row[0] for row in f]; fy = [row[1] for row in f]; fz = [row[2] for row in f] 
+    print(min(fz)) #--
     ax1.plot(t, fx, linestyle='--', label='Fx') 
     ax1.plot(t, fy, linestyle='-.', label='Fy') 
     ax1.plot(t, fz, linestyle='-', label='Fz') 
@@ -160,8 +161,37 @@ def plot_COT_comparision(data, dataSLIP, Tstart, Tend):
     fig.tight_layout()
     return fig
 
+def foot_pos_comparision(data, dataSLIP, Tstart, Tend):
+    i1=np.where(data['t']==Tstart)[0][0]
+    i2=np.where(data['t']==Tend)[0][0]
+
+    t = data['t'][i1:i2]
+    legs_states = data['legs_states'][i1:i2]
+    contactFR = np.array([row[0] for row in legs_states])
+    footPositionsInBaseFrame = data['footPositionsInBaseFrame'][i1:i2]
+    footPosFR = np.array([row[0] for row in footPositionsInBaseFrame])
+    footPositionsInBaseFrame_SLIP = dataSLIP['footPositionsInBaseFrame'][i1:i2]
+    footPosFR_SLIP = np.array([row[0] for row in footPositionsInBaseFrame_SLIP])
+
+
+    fig, ax1 = plt.subplots(1)
+
+    ax1.plot(t, footPosFR)
+    ax1.plot(t, footPosFR_SLIP, linestyle='--')
+    ax1.set_xlabel('Time (sec)'); ax1.set_ylabel('Foot position (m)')
+    ax1.set_title('Foot position of FR leg in body frame')
+    ax1.legend(['Foot pos x', 'Foot pos y', 'Foot pos z','Foot pos x with SLIP', 'Foot pos y with SLIP', 'Foot pos z with SLIP'], bbox_to_anchor=(1,1), loc="upper left")
+    ax1.fill_between(x=t, y1=ax1.get_ylim()[0],y2=ax1.get_ylim()[1], where=contactFR>0,color='gray', alpha=0.2, label='Ground contact')
+
+    ax1.grid()
+    ax1.set_xlabel('Time (sec)')
+
+    fig.tight_layout()
+    return fig
+
 plotting_main_res = True
 plotting_COT_comparison_res = True
+plotting_foot_pos_comparision = True
 
 if plotting_main_res:
     Tstart = 5.11
@@ -183,10 +213,13 @@ if plotting_COT_comparison_res:
     dataSLIP = np.load('pronk_changing_vel/states_COT_SPEED_CHANGING_SLIP.npz', allow_pickle=True)
     fig = plot_COT_comparision(data, dataSLIP, Tstart, Tend)
     fig.savefig(fig_dir+'/COT_comparision.eps', dpi=500)
-
-
-
-
+if plotting_foot_pos_comparision:
+    Tstart = 5.11
+    Tend = 5.91
+    data = np.load('pronk_vel_1ms/states.npz', allow_pickle=True)
+    dataSLIP = np.load('pronk_vel_1ms/statesSLIP.npz', allow_pickle=True)
+    fig = foot_pos_comparision(data, dataSLIP, Tstart, Tend)
+    fig.savefig(fig_dir+'/foot_pos_comparision.eps', dpi=500)
 
 
 # plt.plot(t, actions[:,0]); plt.xlabel('time (sec)'); plt.ylabel('commanded torques (Nm)')
