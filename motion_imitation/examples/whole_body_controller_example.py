@@ -83,7 +83,7 @@ def _generate_example_linear_speed(t):
 
   speed = scipy.interpolate.interp1d(time_points,
                                      speed_points,
-                                     kind="previous",
+                                     kind="linear",
                                      fill_value="extrapolate",
                                      axis=0)(t)
   return speed[0:3], speed[3], False

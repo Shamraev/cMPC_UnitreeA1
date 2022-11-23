@@ -11,9 +11,6 @@ currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentfram
 parentdir = os.path.dirname(os.path.dirname(currentdir))
 os.sys.path.insert(0, parentdir)
 
-Tstart = 5.11
-Tend = 5.91
-
 ## clear and make directory for plots saving
 fig_dir = 'fig'
 try:
@@ -23,7 +20,7 @@ except:
 os.makedirs(fig_dir, exist_ok=True)
 
 
-def plot_main_res(data):
+def plot_main_res(data, Tstart, Tend):
     i1=np.where(data['t']==Tstart)[0][0]
     i2=np.where(data['t']==Tend)[0][0]
 
@@ -53,7 +50,7 @@ def plot_main_res(data):
 
     ax1.set_ylabel('Force (N)')
     ax1.set_title('Computed force for FR leg')
-    ax1.fill_between(x=t, y1=ax1.get_ylim()[0],y2=ax1.get_ylim()[1], where=contactFR>0,color='gray', alpha=0.2)
+    ax1.fill_between(x=t, y1=ax1.get_ylim()[0],y2=ax1.get_ylim()[1], where=contactFR>0,color='gray', alpha=0.2, label='Ground contact')
     ax1.legend(bbox_to_anchor=(1,1), loc="upper left")
     ax1.grid()
     # ax1.savefig(fig_dir+'/forceZ.eps', dpi=400)
@@ -74,7 +71,7 @@ def plot_main_res(data):
     ax2.plot(t, com_pos_z, label = "CoM z")
     ax2.plot(t, des_com_pos_z, label = "Des CoM z"); ax2.set_ylabel('CoM z (m)')
     ax2.set_title('CoM z')
-    ax2.fill_between(x=t, y1=ax2.get_ylim()[0],y2=ax2.get_ylim()[1], where=contactFR>0,color='gray', alpha=0.2)
+    ax2.fill_between(x=t, y1=ax2.get_ylim()[0],y2=ax2.get_ylim()[1], where=contactFR>0,color='gray', alpha=0.2, label='Ground contact')
     ax2.legend(bbox_to_anchor=(1,1), loc="upper left")
     ax2.grid()
 
@@ -84,7 +81,7 @@ def plot_main_res(data):
     ax3.plot(t, com_vel_z, label = "CoM z vel")
     ax3.plot(t, des_com_vel_z, label = "Des CoM z vel");  ax3.set_ylabel('CoM z velocity (m/s)')
     ax3.set_title('CoM z velocity')
-    ax3.fill_between(x=t, y1=ax3.get_ylim()[0],y2=ax3.get_ylim()[1], where=contactFR>0,color='gray', alpha=0.2)
+    ax3.fill_between(x=t, y1=ax3.get_ylim()[0],y2=ax3.get_ylim()[1], where=contactFR>0,color='gray', alpha=0.2, label='Ground contact')
     ax3.legend(bbox_to_anchor=(1,1), loc="upper left")
     ax3.grid()
 
@@ -94,7 +91,7 @@ def plot_main_res(data):
     ax4.plot(t, com_vel_x, label = "CoM x vel")
     ax4.plot(t, des_com_vel_x, label = "Des CoM x vel"); ax4.set_xlabel('Time (sec)'); ax4.set_ylabel('CoM x velocity (m/s)')
     ax4.set_title('CoM x velocity')
-    ax4.fill_between(x=t, y1=ax4.get_ylim()[0],y2=ax4.get_ylim()[1], where=contactFR>0,color='gray', alpha=0.2)
+    ax4.fill_between(x=t, y1=ax4.get_ylim()[0],y2=ax4.get_ylim()[1], where=contactFR>0,color='gray', alpha=0.2, label='Ground contact')
     ax4.legend(bbox_to_anchor=(1,1), loc="upper left")
     ax4.grid()
 
@@ -103,7 +100,7 @@ def plot_main_res(data):
     fig.tight_layout()
     return fig
 
-def plot_energy_comparision(data, dataSLIP):
+def plot_energy_comparision(data, dataSLIP, Tstart, Tend):
     i1=np.where(data['t']==Tstart)[0][0]
     i2=np.where(data['t']==Tend)[0][0]
 
@@ -116,10 +113,10 @@ def plot_energy_comparision(data, dataSLIP):
     fig, ax1 = plt.subplots(1)
 
     ax1.plot(t, E_i, label='dE Without SLIP')
-    ax1.plot(t, E_i_SLIP, label='dE With SLIP');  
+    ax1.plot(t, E_i_SLIP, label='dE With SLIP', linestyle='--');  
     ax1.set_xlabel('Time (sec)'); ax1.set_ylabel('Energy in each step dt (J)')
     ax1.set_title('Energy')
-    ax1.fill_between(x=t, y1=ax1.get_ylim()[0],y2=ax1.get_ylim()[1], where=contactFR>0,color='gray', alpha=0.2)
+    ax1.fill_between(x=t, y1=ax1.get_ylim()[0],y2=ax1.get_ylim()[1], where=contactFR>0,color='gray', alpha=0.2, label='Ground contact')
     ax1.legend(bbox_to_anchor=(1,1), loc="upper left")
     ax1.grid()
     ax1.set_xlabel('Time (sec)')
@@ -127,16 +124,69 @@ def plot_energy_comparision(data, dataSLIP):
     fig.tight_layout()
     return fig
 
+def plot_COT_comparision(data, dataSLIP, Tstart, Tend):
+    i1=np.where(data['t']==Tstart)[0][0]
+    i2=np.where(data['t']==Tend)[0][0]
 
-data = np.load('states.npz', allow_pickle=True)
-fig = plot_main_res(data)
-fig.savefig(fig_dir+'/results_without_SLIP.eps', dpi=500)
-dataSLIP = np.load('statesSLIP.npz', allow_pickle=True)
-fig = plot_main_res(dataSLIP)
-fig.savefig(fig_dir+'/results_with_SLIP.eps', dpi=500)
+    t = data['t'][i1:i2]
+    COT = data['COT'][i1:i2]
+    COT_SLIP = dataSLIP['COT'][i1:i2]
+    legs_states = data['legs_states'][i1:i2]
+    contactFR = np.array([row[0] for row in legs_states])
+    des_com_vels = data['des_com_vels'][i1:i2] # mb use this 
+    des_com_vel_x=[row[0] for row in des_com_vels]
+    com_vels = data['com_vels'][i1:i2]
+    com_vel_x=[row[0] for row in com_vels]
 
-fig = plot_energy_comparision(data, dataSLIP)
-fig.savefig(fig_dir+'/energy_comparision.eps', dpi=500)
+    fig, (ax1, ax2) = plt.subplots(2, sharex=True)
+
+    ax1.plot(t, COT, label='COT Without SLIP')
+    ax1.plot(t, COT_SLIP, label='COT With SLIP')  
+    ax1.set_ylabel('COT')
+    ax1.fill_between(x=t, y1=ax1.get_ylim()[0],y2=ax1.get_ylim()[1], where=contactFR>0,color='gray', alpha=0.2, label='Ground contact')
+    ax1.legend(bbox_to_anchor=(1,1), loc="upper left")
+    ax1.set_title('COT with and without SLIP with changing desired x velosity')
+    ax1.grid()
+
+    ax2.plot(t, com_vel_x, label='CoM x velocity')
+    ax2.plot(t, des_com_vel_x, label='CoM des x velocity')
+    ax2.set_xlabel('Time (sec)')  
+    ax2.set_ylabel('X velocity (m/s)')
+
+    ax2.fill_between(x=t, y1=ax2.get_ylim()[0],y2=ax2.get_ylim()[1], where=contactFR>0,color='gray', alpha=0.2, label='Ground contact')
+    ax2.legend(bbox_to_anchor=(1,1), loc="upper left")
+    ax2.grid()
+
+    fig.tight_layout()
+    return fig
+
+plotting_main_res = True
+plotting_COT_comparison_res = True
+
+if plotting_main_res:
+    Tstart = 5.11
+    Tend = 5.91
+    data = np.load('pronk_vel_1ms/states.npz', allow_pickle=True)
+    fig = plot_main_res(data, Tstart, Tend)
+    fig.savefig(fig_dir+'/results_without_SLIP.eps', dpi=500)
+    dataSLIP = np.load('pronk_vel_1ms/statesSLIP.npz', allow_pickle=True)
+    fig = plot_main_res(dataSLIP, Tstart, Tend)
+    fig.savefig(fig_dir+'/results_with_SLIP.eps', dpi=500)
+
+    fig = plot_energy_comparision(data, dataSLIP, Tstart, Tend)
+    fig.savefig(fig_dir+'/energy_comparision.eps', dpi=500)
+if plotting_COT_comparison_res:
+    # plotting COT with speed changing
+    Tstart = 4
+    Tend = 12
+    data = np.load('pronk_changing_vel/states_COT_SPEED_CHANGING.npz', allow_pickle=True)
+    dataSLIP = np.load('pronk_changing_vel/states_COT_SPEED_CHANGING_SLIP.npz', allow_pickle=True)
+    fig = plot_COT_comparision(data, dataSLIP, Tstart, Tend)
+    fig.savefig(fig_dir+'/COT_comparision.eps', dpi=500)
+
+
+
+
 
 
 # plt.plot(t, actions[:,0]); plt.xlabel('time (sec)'); plt.ylabel('commanded torques (Nm)')
