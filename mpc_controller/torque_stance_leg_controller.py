@@ -79,6 +79,7 @@ class SLIP_generator():
     self._z_dot0 = z_dot0
     self._x0 = x0
     self._x_dot0 = x_dot0
+    self._X0 = [x0, z0, x_dot0, z_dot0]
 
     self.state_z = np.array([[self._z0], [self._z_dot0]])
     self.state_x = np.array([[self._x0], [self._x_dot0]])
@@ -103,10 +104,17 @@ class SLIP_generator():
 
     return self.state_x
 
+  # self._slip_model(X):
+
+
+  def get_full_slip_traj(self):
+    X = X + self._Ts*self._slip_model(X)
+    return X[0:2], X[2:4]
 
   def get_traj(self):
     z = self.get_traj_z()
     x = self.get_traj_x()
+    # z,x = self.get_full_slip_traj()
     return z, x
 
   
@@ -241,10 +249,10 @@ class TorqueStanceLegController(leg_controller.LegController):
       for leg_state in self._gait_generator.desired_leg_state],
     dtype=np.int32)
 
-    x = 0
-    z = self._estimate_robot_height(contacts)
+    x = self._robot.GetFootPositionsInBaseFrame()[0][0]
+    z = self._robot.GetFootPositionsInBaseFrame()[0][2] # self._estimate_robot_height(contacts)
     #z = self._robot.GetBasePosition()[2] # !! #
-    z_dot, x_dot = self._state_estimator.com_velocity_body_frame[2], self.desired_speed[0]
+    z_dot, x_dot = self._state_estimator.com_velocity_body_frame[2], self._state_estimator.com_velocity_body_frame[0]
     if start_contact:
       self._SLIP.Reset(z, z_dot, x, x_dot)
       self._SLIP.started_cycle = True

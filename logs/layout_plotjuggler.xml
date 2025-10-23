@@ -1,0 +1,61 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<root>
+ <tabbed_widget name="Main Window" parent="main_window">
+  <Tab tab_name="tab2" containers="1">
+   <Container>
+    <DockSplitter sizes="0.333333;0.333333;0.333333" count="3" orientation="-">
+     <DockArea name="...">
+      <plot style="Lines" mode="TimeSeries">
+       <range bottom="-22.829339" left="4.532494" top="1.813951" right="5.537755"/>
+       <limitY/>
+       <curve name="contact_force_z" color="#d62728"/>
+      </plot>
+     </DockArea>
+     <DockArea name="...">
+      <plot style="Lines" mode="TimeSeries">
+       <range bottom="0.194485" left="4.532494" top="0.271485" right="5.537755"/>
+       <limitY/>
+       <curve name="des_com_pos_z" color="#1ac938"/>
+       <curve name="com_pos_z" color="#ff7f0e"/>
+      </plot>
+     </DockArea>
+     <DockArea name="...">
+      <plot style="Lines" mode="TimeSeries">
+       <range bottom="-0.437285" left="4.532494" top="0.726062" right="5.537755"/>
+       <limitY/>
+       <curve name="des_com_vel_z" color="#f14cc1"/>
+       <curve name="com_vel_z" color="#9467bd"/>
+      </plot>
+     </DockArea>
+    </DockSplitter>
+   </Container>
+  </Tab>
+  <currentTabIndex index="0"/>
+ </tabbed_widget>
+ <use_relative_time_offset enabled="1"/>
+ <!-- - - - - - - - - - - - - - - -->
+ <!-- - - - - - - - - - - - - - - -->
+ <Plugins>
+  <plugin ID="DataLoad CSV">
+   <default delimiter="0" time_axis="t"/>
+  </plugin>
+  <plugin ID="DataLoad ULog"/>
+  <plugin ID="UDP Server"/>
+  <plugin ID="WebSocket Server"/>
+  <plugin status="idle" ID="CSV Exporter"/>
+ </Plugins>
+ <!-- - - - - - - - - - - - - - - -->
+ <previouslyLoaded_Datafiles>
+  <fileInfo prefix="" filename="2022_05_15_17_09_14/states.csv">
+   <selected_datasources value=""/>
+   <plugin ID="DataLoad CSV">
+    <default delimiter="0" time_axis="t"/>
+   </plugin>
+  </fileInfo>
+ </previouslyLoaded_Datafiles>
+ <!-- - - - - - - - - - - - - - - -->
+ <customMathEquations/>
+ <snippets/>
+ <!-- - - - - - - - - - - - - - - -->
+</root>
+

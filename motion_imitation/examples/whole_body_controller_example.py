@@ -1,6 +1,6 @@
 """Example of whole body controller on A1 robot."""
 use_cMPC = True
-print_COT = True
+print_COT = False
 USE_SLIP = False
 
 import os
@@ -35,7 +35,7 @@ from motion_imitation.robots import a1
 from motion_imitation.robots import robot_config
 from motion_imitation.robots.gamepad import gamepad_reader
 
-flags.DEFINE_bool("record_video", False, "Record video")
+flags.DEFINE_bool("record_video", True, "Record video")
 flags.DEFINE_string("logdir", 'logs', "where to log trajectories.")
 flags.DEFINE_bool("use_gamepad", False,
                   "whether to use gamepad to provide control input.")
@@ -95,7 +95,7 @@ def _setup_controller(robot):
 
   gait_generator = multiple_gait_generator.MultipleGaitGenerator(
       robot,
-      gaits.PRONK)
+      gaits.TROT_WALK)# gaits.PRONK)
   window_size = 20 if not FLAGS.use_real_robot else 1
   state_estimator = com_velocity_estimator.COMVelocityEstimator(
       robot, window_size=window_size)
