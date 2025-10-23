@@ -1,6 +1,8 @@
 # Lint as: python3
 """A torque based stance controller framework."""
 
+USE_MPC_LIE = True
+
 from __future__ import absolute_import
 from __future__ import division
 #from __future__ import google_type_annotations
@@ -28,7 +30,10 @@ except:  #pylint: disable=W0702
   sys.exit()
 
 try:
-  import mpc_osqp as convex_mpc  # pytype: disable=import-error
+  if USE_MPC_LIE:
+    import convex_mpc_lie as convex_mpc 
+  else:
+    import mpc_osqp as convex_mpc  # pytype: disable=import-error
 except:  #pylint: disable=W0702
   print("You need to install motion_imitation")
   print("Either run python3 setup.py install --user in this repo")
