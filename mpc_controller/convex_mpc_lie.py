@@ -126,14 +126,6 @@ def getX_errorMPC(x, xd):  # for error-state MPC, x - quat, xd - lie algebra
     zetaE = Log_SE3(la.inv(Td) @ T)
     xi = np.concatenate([v, ω])
     return np.concatenate([zetaE, xi])
-
-def smart_concat(arrays):
-    try:
-        # First try NumPy concatenation
-        return np.concatenate(arrays)
-    except (ValueError, TypeError):
-        # If that fails, use CVXPY concatenation
-        return cvx.vstack(arrays)
     
 def error_state_lie(x, x_d, xic, costN, error_state_MPC=False):
     """Compute error state in Lie algebra"""
@@ -219,13 +211,13 @@ def error_state_lie(x, x_d, xic, costN, error_state_MPC=False):
             zeta_delta = np.zeros(6)
             xi_delta = np.zeros(6)
         
-        return smart_concat([zeta_delta, xi_delta])
+        return zeta_delta, xi_delta
     else:
         zetaE = x[:6]
         xi = x[6:12]
         xi_d = x_d[6:12]
         zetaE_dot = -AdSE3_v(xi_d) @ zetaE + xi - xi_d
-        return np.concatenate([zetaE, zetaE_dot])
+        return zetaE, zetaE_dot
 
 def rpy_rate_to_angular_velocity(rpy, rpy_rate):
     """
@@ -426,7 +418,7 @@ class ConvexMpc:
 
         error_state_MPC = False
         N_mpc = self._PLANNING_HORIZON_STEPS
-        com_position = np.zeros(3)
+        # com_position = np.zeros(3)
         # temp, it is not correct, and it is not necessary for full-state lie mpc
         x_d = np.concatenate([
             desired_com_position,
@@ -631,14 +623,16 @@ class ConvexMpc:
         for k in range(N_mpc - 1):
             xi = X[6:12, k]
             xi_sum = xi_sum + xi
-            x_k = error_state_lie(X[:, k], X_ref_window[:, k], xic, costN, error_state_MPC)
+            zeta_delta, xi_delta = error_state_lie(X[:, k], X_ref_window[:, k], xic, costN, error_state_MPC)
+            x_k = cvx.hstack([zeta_delta, xi_delta])
             u_k = U[:, k]
             
             # Add stagewise cost
             cost += 0.5 * cvx.quad_form(x_k, Q) + 0.5 * cvx.quad_form(u_k, R)
         
         # Add terminal cost
-        x_n = error_state_lie(X[:, N_mpc - 1], X_ref_window[:, N_mpc - 1], xic, costN, error_state_MPC)
+        zeta_delta, xi_delta  = error_state_lie(X[:, N_mpc - 1], X_ref_window[:, N_mpc - 1], xic, costN, error_state_MPC)
+        x_n = cvx.hstack([zeta_delta, xi_delta])
         cost += 0.5 * cvx.quad_form(x_n, 10*Q)
         
         # Constraints
@@ -663,7 +657,7 @@ class ConvexMpc:
                 constraints.append(fj_w[1] <= mu[j]*fj_w[2])
                 constraints.append(fj_w[1] >= -mu[j]*fj_w[2])
                 # z axis
-                constraints.append(fj_w[2] > 0)
+                constraints.append(fj_w[2] >= 0)
         
         # Solve the problem
         prob = cvx.Problem(cvx.Minimize(cost), constraints)
@@ -673,7 +667,7 @@ class ConvexMpc:
             raise RuntimeError(f"Solver failed with status: {prob.status}")
         
         # Return the first control input
-        return U[:, 0].value
+        return -U[:, 0].value
             
     def _rpy_to_rotation_matrix(self, rpy):
         """Convert roll, pitch, yaw to rotation matrix."""

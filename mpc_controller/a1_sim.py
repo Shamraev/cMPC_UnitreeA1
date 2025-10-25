@@ -403,6 +403,10 @@ class SimpleRobot(object):
     joint_angles = [all_joint_angles[i] for i in joint_ids]
     return joint_angles
   
+  def GetBasePosition(self):
+    base_position, base_orientation = self.pybullet_client.getBasePositionAndOrientation(self.quadruped)
+    return base_position
+  
   def ComputeMotorAnglesFromFootLocalPosition(self, leg_id,
                                               foot_local_position):
     """Use IK to compute the motor angles, given the foot link's local position.
