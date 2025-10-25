@@ -416,26 +416,45 @@ class ConvexMpc:
         self._R = self._rpy_to_rotation_matrix(com_roll_pitch_yaw)
         self._foot_friction_coeffs = foot_friction_coeffs
 
-        # Td0?? make relative trajectory
-        x_c = self.get_zeta(com_position,self._R) + self.get_xi(com_velocity,com_roll_pitch_yaw,com_roll_pitch_yaw_rate)
-
+        error_state_MPC = False
+        N_mpc = self._PLANNING_HORIZON_STEPS
         # temp, it is not correct
         x_d = desired_com_position+desired_com_roll_pitch_yaw+desired_com_velocity+desired_com_angular_velocity
-        N_mpc = self._PLANNING_HORIZON_STEPS
-        Ad,Bd,Termd = self.get_AB(x_d, x_c, error_state_MPC=False)
+        
+        # Td0?? make relative trajectory
+        # x_c = self.get_zeta(com_position,self._R) + self.get_xi(com_velocity,com_roll_pitch_yaw,com_roll_pitch_yaw_rate)
+        
+        # ??# discard of xic with quaternions
+        q = Qtoq(self._R)
+        xic = com_position+q+self.get_xi(com_velocity,com_roll_pitch_yaw,com_roll_pitch_yaw_rate)  
+
+        T_d_traj,xi_d_traj = self.getDesTraj(com_position,self._R,x_d[6:12],N_mpc,self._PLANNING_TIMESTEP)
+        X_ref_window = self.getDesLieTraj(com_position,self._R,x_d[6:12],N_mpc,self._PLANNING_TIMESTEP)
+        Td0 = np.identity(4)
+        if not error_state_MPC:                    
+            Td0 = T_d_traj[:,:,1] #  Exp_SE3(X_ref_tilde[1:6,1]) #GetSE3_M(x_c)            
+            X_ref_window=GetLocalTrajLie(T_d_traj,xi_d_traj,Td0) 
+            xic=GetLocalXstate(xic,Td0) 
+        
+        Ad,Bd,Termd = self.get_AB(x_d, sim2control_state(xic), error_state_MPC)
         # self._weights = (roll_pitch_yaw, position, angular_velocity, velocity, gravity_place_holder)
         Q = np.diag([self._weights[3:6]+self._weights[:3]+self._weights[9:12]+self._weights[6:9]]) 
         R = 0.00001*np.identity(12)
         # temp
-        X_ref_window = self.getDesLieTraj(com_position,self._R,x_d[6:12],N_mpc,self._PLANNING_TIMESTEP)
-        # ??# discard of xic with quaternions
-        q = Qtoq(self._R)
-        xic = com_position+q+self.get_xi(com_velocity,com_roll_pitch_yaw,com_roll_pitch_yaw_rate)         
+
+       
         costN = 1.5         
         return self.convex_mpc(Ad,Bd,Termd, Q, R,
                X_ref_window, xic,
-               N_mpc, costN, error_state_MPC=False)
+               N_mpc, costN, error_state_MPC)
         # return np.zeros(12)
+
+    def getDesTraj(self,p,R,xi_d,Nt,dt):
+        T = np.zeros(4,4)
+        T[:3, :3] = R
+        T[:3, 3] = p
+        T_d_traj,xi_d_traj=desired_trajectory(T, xi_d,Nt, dt)    
+        return T_d_traj,xi_d_traj
 
     def getDesLieTraj(self,p,R,xi_d,Nt,dt):
         T = np.zeros(4,4)
