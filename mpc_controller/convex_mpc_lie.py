@@ -252,6 +252,7 @@ class ConvexMpc:
 
         self._foot_positions_base_frame = np.array(12)
         self._foot_contact_state = np.array(4)
+        self._R = np.identity(3)
         # Initialize other necessary variables
         self._setup_mpc_problem()
      
@@ -320,6 +321,7 @@ class ConvexMpc:
 
         self._foot_positions_base_frame = foot_positions_base_frame
         self._foot_contact_state = foot_contact_state
+        self._R = self._rpy_to_rotation_matrix(com_roll_pitch_yaw)
         # return convex_mpc()
         return np.zeros(12)
 
@@ -359,13 +361,17 @@ class ConvexMpc:
         #     Bt = np.vstack([np.zeros((6, 6)), la.inv(J_g)])
         # elif dyn_model.model_type == DynModels.DynQuad:
         #     Bt = np.vstack([np.zeros((6, 4)), la.inv(J_g) @ C])
-
-        # rb1 = self._
-
-        Gravity_term = Q.T @ np.array([0, 0, -m * g])
-
-        Bt = np.vstack([np.zeros((6, 6)), la.inv(J)])
-        Bt = np.array(Bt)
+        
+        Gravity_term = np.zeros(9) + self._R.T @ np.array([0, 0, -g])
+        rb1 = self._foot_positions_base_frame[0:3]*self._foot_contact_state[0]
+        rb2 = self._foot_positions_base_frame[3:6]*self._foot_contact_state[1]
+        rb3 = self._foot_positions_base_frame[6:9]*self._foot_contact_state[2]
+        rb4 = self._foot_positions_base_frame[9:12]*self._foot_contact_state[3]
+        J_inv = la.inv(J)        
+        Bt = np.block([
+            [np.zeros((6, 12))],
+            [J_inv@hat(rb1), J_inv@hat(rb2),J_inv@hat(rb3), J_inv@hat(rb4)]
+        ])
         
         # From paper [1], Body velocity = xi dynamics linearization 
         xi_c = x_c[6:12]
@@ -385,7 +391,7 @@ class ConvexMpc:
             zetac = x_c[:6]
             At = np.block([
                 [np.zeros((6, 6)), np.eye(6)],
-                [Mg, H]
+                [np.zeros((6, 6)), H] # [Mg, H]
             ])
             At = np.array(At)
             
@@ -408,7 +414,7 @@ class ConvexMpc:
             xi_d = x_d[6:12]
             At = np.block([
                 [-AdSE3_v(xi_d), np.eye(6)],
-                [Mg, H]
+                [np.zeros((6, 6)), H] # [Mg, H]
             ])
             At = np.array(At)
             
