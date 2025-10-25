@@ -127,6 +127,14 @@ def getX_errorMPC(x, xd):  # for error-state MPC, x - quat, xd - lie algebra
     xi = np.concatenate([v, ω])
     return np.concatenate([zetaE, xi])
 
+def smart_concat(arrays):
+    try:
+        # First try NumPy concatenation
+        return np.concatenate(arrays)
+    except (ValueError, TypeError):
+        # If that fails, use CVXPY concatenation
+        return cvx.vstack(arrays)
+    
 def error_state_lie(x, x_d, xic, costN, error_state_MPC=False):
     """Compute error state in Lie algebra"""
     if not error_state_MPC:
@@ -211,7 +219,7 @@ def error_state_lie(x, x_d, xic, costN, error_state_MPC=False):
             zeta_delta = np.zeros(6)
             xi_delta = np.zeros(6)
         
-        return np.concatenate([zeta_delta, xi_delta])
+        return smart_concat([zeta_delta, xi_delta])
     else:
         zetaE = x[:6]
         xi = x[6:12]
@@ -418,15 +426,26 @@ class ConvexMpc:
 
         error_state_MPC = False
         N_mpc = self._PLANNING_HORIZON_STEPS
-        # temp, it is not correct
-        x_d = desired_com_position+desired_com_roll_pitch_yaw+desired_com_velocity+desired_com_angular_velocity
+        com_position = np.zeros(3)
+        # temp, it is not correct, and it is not necessary for full-state lie mpc
+        x_d = np.concatenate([
+            desired_com_position,
+            desired_com_roll_pitch_yaw, 
+            desired_com_velocity,
+            desired_com_angular_velocity
+        ])
         
         # Td0?? make relative trajectory
         # x_c = self.get_zeta(com_position,self._R) + self.get_xi(com_velocity,com_roll_pitch_yaw,com_roll_pitch_yaw_rate)
         
         # ??# discard of xic with quaternions
         q = Qtoq(self._R)
-        xic = com_position+q+self.get_xi(com_velocity,com_roll_pitch_yaw,com_roll_pitch_yaw_rate)  
+        xi = self.get_xi(com_velocity,com_roll_pitch_yaw,com_roll_pitch_yaw_rate)
+        xic = np.concatenate([
+            com_position,
+            q, 
+            xi
+        ])
 
         T_d_traj,xi_d_traj = self.getDesTraj(com_position,self._R,x_d[6:12],N_mpc,self._PLANNING_TIMESTEP)
         X_ref_window = self.getDesLieTraj(com_position,self._R,x_d[6:12],N_mpc,self._PLANNING_TIMESTEP)
@@ -438,7 +457,8 @@ class ConvexMpc:
         
         Ad,Bd,Termd = self.get_AB(x_d, sim2control_state(xic), error_state_MPC)
         # self._weights = (roll_pitch_yaw, position, angular_velocity, velocity, gravity_place_holder)
-        Q = np.diag([self._weights[3:6]+self._weights[:3]+self._weights[9:12]+self._weights[6:9]]) 
+        Q_diag = np.concatenate([self._weights[3:6],self._weights[:3],self._weights[9:12],self._weights[6:9]])
+        Q = np.diag(Q_diag) 
         R = 0.00001*np.identity(12)
         # temp
 
@@ -450,27 +470,27 @@ class ConvexMpc:
         # return np.zeros(12)
 
     def getDesTraj(self,p,R,xi_d,Nt,dt):
-        T = np.zeros(4,4)
+        T = np.identity(4)
         T[:3, :3] = R
         T[:3, 3] = p
         T_d_traj,xi_d_traj=desired_trajectory(T, xi_d,Nt, dt)    
         return T_d_traj,xi_d_traj
 
     def getDesLieTraj(self,p,R,xi_d,Nt,dt):
-        T = np.zeros(4,4)
+        T = np.identity(4)
         T[:3, :3] = R
         T[:3, 3] = p
         T_d_traj,xi_d_traj=desired_trajectory(T, xi_d,Nt, dt)    
         return GetTrajLie(T_d_traj, xi_d_traj)
     def get_zeta(self,p,R):
-        T = np.zeros(4,4)
+        T = np.identity(4)
         T[:3, :3] = R
         T[:3, 3] = p
         return Log_SE3(T)
 
     def get_xi(self,v,rpy,rpy_rate):
         w = rpy_rate_to_angular_velocity(rpy,rpy_rate)
-        return np.array(v+w)
+        return np.concatenate([v,w])
 
     # Linearized dynamics
     def get_AB(self,x_d, x_c, error_state_MPC=False):
@@ -511,13 +531,17 @@ class ConvexMpc:
         # elif dyn_model.model_type == DynModels.DynQuad:
         #     Bt = np.vstack([np.zeros((6, 4)), la.inv(J_g) @ C])
         
-        Gravity_term = np.zeros(9) + self._R.T @ np.array([0, 0, -g])
+        Gravity_term = np.concatenate([
+                np.zeros(9),
+                self._R.T @ np.array([0, 0, -g])
+        ]) 
+
         rb1 = self._foot_positions_base_frame[0:3]*self._foot_contact_state[0]
         rb2 = self._foot_positions_base_frame[3:6]*self._foot_contact_state[1]
         rb3 = self._foot_positions_base_frame[6:9]*self._foot_contact_state[2]
         rb4 = self._foot_positions_base_frame[9:12]*self._foot_contact_state[3]
         J_inv = la.inv(J)  
-        m_inv = (1/m)*np.identity      
+        m_inv = (1/m)*np.identity(3)      
         Bt = np.block([
             [np.zeros((6, 12))],
             [J_inv@hat(rb1), J_inv@hat(rb2),J_inv@hat(rb3), J_inv@hat(rb4)],
@@ -544,7 +568,6 @@ class ConvexMpc:
                 [np.zeros((6, 6)), np.eye(6)],
                 [np.zeros((6, 6)), H] # [Mg, H]
             ])
-            At = np.array(At)
             
             # Term_t
             Term_t = Gravity_term + np.concatenate([np.zeros(6), bt])
@@ -557,7 +580,7 @@ class ConvexMpc:
             # Add zeta dynamics
             A_zeta = np.block([
                 [np.eye(6), Jac_r_inv_SE3(zetac) * h],
-                A_mat[6:12, :12]
+                [A_mat[6:12, :12]]
             ])
             A_mat = A_zeta
         else:

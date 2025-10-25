@@ -278,7 +278,7 @@ class TorqueStanceLegController(leg_controller.LegController):
     # print("Com RPY Rate: {}".format(self._robot.GetBaseRollPitchYawRate()))
     p.submitProfileTiming("predicted_contact_forces")  
     predicted_contact_forces = self._cpp_mpc.compute_contact_forces(
-        self._robot.GetBasePosition,  #com_position //??//
+        [0],#self._robot.GetBasePosition,  #com_position //??//
         np.asarray(self._state_estimator.com_velocity_body_frame,
                   dtype=np.float64),  #com_velocity
         np.array(com_roll_pitch_yaw, dtype=np.float64),  #com_roll_pitch_yaw
