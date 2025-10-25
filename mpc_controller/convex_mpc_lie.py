@@ -253,6 +253,7 @@ class ConvexMpc:
         self._foot_positions_base_frame = np.array(12)
         self._foot_contact_state = np.array(4)
         self._R = np.identity(3)
+        self._foot_friction_coeffs = [0.7,0.7,0.7,0.7]
         # Initialize other necessary variables
         self._setup_mpc_problem()
      
@@ -273,7 +274,7 @@ class ConvexMpc:
         com_position,  # [x,y,z] in world frame
         com_velocity,  # [x_dot,y_dot,z_dot] in body frame
         com_roll_pitch_yaw,  # [roll, pitch, yaw] in world frame
-        com_angular_velocity,  # [wx, wy, wz] in body frame
+        com_roll_pitch_yaw_rate,  # in body frame
         foot_contact_state,  # [c1, c2, c3, c4] contact states for 4 legs
         foot_positions_base_frame,  # [p1_x,p1_y,p1_z,...,p4_x,p4_y,p4_z] in body frame
         foot_friction_coeffs,  # [k1,k2,k3,k4]
@@ -322,18 +323,39 @@ class ConvexMpc:
         self._foot_positions_base_frame = foot_positions_base_frame
         self._foot_contact_state = foot_contact_state
         self._R = self._rpy_to_rotation_matrix(com_roll_pitch_yaw)
-        # return convex_mpc()
-        return np.zeros(12)
+        self._foot_friction_coeffs = foot_friction_coeffs
+
+        #xi_c = com_position+self._R ++ com_velocity + com_roll_pitch_yaw_rate
+
+        # x_d = desired_com_position + desired_com_velocity
+        # desired_com_roll_pitch_yaw
+        # desired_com_angular_velocity
+        
+        Ad,Bd,Termd = self.get_AB(x_d, x_c, false)
+        # self._weights = (roll_pitch_yaw, position, angular_velocity, velocity, gravity_place_holder)
+        Q = np.diag([self._weights[3:6]+self._weights[:3]+self._weights[9:12]+self._weights[6:9]]) 
+        R = 0.00001*np.identity(12)
+        X_ref_window 
+        xic
+        N_mpc = self._PLANNING_HORIZON_STEPS 
+        costN = 1.5 
+        error_state_MPC=false
+        return convex_mpc(Ad,Bd,Termd, Q, R,
+               X_ref_window, xic,
+               N_mpc, costN, error_state_MPC)
+        # return np.zeros(12)
 
     # Linearized dynamics
-    def get_AB(self,x_d, x_c, Td_c, error_state_MPC=False):
+    def get_AB(self,x_d, x_c, error_state_MPC=False):
         """Get linearized dynamics matrices A, B and constant term"""
         # Gravity term
         g = 9.81  # gravity
         m = self._body_mass
-        J_v = self._body_inertia
-        J = np.diag(J_v)
-        J_g = np.diag([m, m, m] + J_v)   
+        J = self._body_inertia
+        J_g = np.block([
+            [np.diag([m, m, m]),np.zeros((3, 3))],
+            [np.zeros((3, 3)),J] 
+        ])  
         
         # Q = Exp_SO3(x_c[3:6])  # Q = Td_c[:3, :3] 
         
@@ -367,10 +389,12 @@ class ConvexMpc:
         rb2 = self._foot_positions_base_frame[3:6]*self._foot_contact_state[1]
         rb3 = self._foot_positions_base_frame[6:9]*self._foot_contact_state[2]
         rb4 = self._foot_positions_base_frame[9:12]*self._foot_contact_state[3]
-        J_inv = la.inv(J)        
+        J_inv = la.inv(J)  
+        m_inv = (1/m)*np.identity      
         Bt = np.block([
             [np.zeros((6, 12))],
-            [J_inv@hat(rb1), J_inv@hat(rb2),J_inv@hat(rb3), J_inv@hat(rb4)]
+            [J_inv@hat(rb1), J_inv@hat(rb2),J_inv@hat(rb3), J_inv@hat(rb4)],
+            [m_inv,m_inv,m_inv,m_inv]
         ])
         
         # From paper [1], Body velocity = xi dynamics linearization 
@@ -430,8 +454,8 @@ class ConvexMpc:
 
 
     def convex_mpc(self,A,B,Term, Q, R,
-               X_ref_window, xic, u_min, u_max,
-               N_mpc, Td0, costN, error_state_MPC):
+               X_ref_window, xic,
+               N_mpc, costN, error_state_MPC):
         """Convex Model Predictive Control solver"""
         # Get sizes for state and control
         nx, nu = B.shape
@@ -477,10 +501,19 @@ class ConvexMpc:
         for k in range(N_mpc - 1):
             constraints.append(X[:, k + 1] == A @ X[:, k] + B @ U[:, k] + Term)
         
+        mu = self._foot_friction_coeffs
         # Input constraints
         for k in range(N_mpc - 1):
-            constraints.append(U[:, k] >= u_min)
-            constraints.append(U[:, k] <= u_max)
+            for j in range(4): # j'th leg
+                fj_w = self._R @ U[3*j:3*j+3, k]
+                # x axis
+                constraints.append(fj_w[0] <= mu[j]*fj_w[2])
+                constraints.append(fj_w[0] >= -mu[j]*fj_w[2])
+                # y axis
+                constraints.append(fj_w[1] <= mu[j]*fj_w[2])
+                constraints.append(fj_w[1] >= -mu[j]*fj_w[2])
+                # z axis
+                constraints.append(fj_w[2] > 0)
         
         # Solve the problem
         prob = cvx.Problem(cvx.Minimize(cost), constraints)
