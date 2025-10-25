@@ -2,6 +2,7 @@ OSQP = 0
 QPOASES = 1
 
 import numpy as np
+import math
 import scipy.linalg as la
 from enum import Enum
 from typing import Union, List, Tuple, Optional
@@ -218,6 +219,96 @@ def error_state_lie(x, x_d, xic, costN, error_state_MPC=False):
         zetaE_dot = -AdSE3_v(xi_d) @ zetaE + xi - xi_d
         return np.concatenate([zetaE, zetaE_dot])
 
+def rpy_rate_to_angular_velocity(rpy, rpy_rate):
+    """
+    Convert RPY rates to angular velocity in body frame using vector inputs
+    
+    Parameters:
+    -----------
+    rpy : numpy.ndarray or list
+        [roll, pitch, yaw] Euler angles in radians
+    rpy_rate : numpy.ndarray or list  
+        [roll_rate, pitch_rate, yaw_rate] in rad/s
+    
+    Returns:
+    --------
+    numpy.ndarray
+        Angular velocity vector [p, q, r] in body frame (rad/s)
+    """
+    # Extract components
+    roll, pitch, yaw = rpy
+    roll_rate, pitch_rate, yaw_rate = rpy_rate
+    
+    # Transformation matrix from RPY rates to body angular velocities
+    T = np.array([
+        [1, 0, -math.sin(pitch)],
+        [0, math.cos(roll), math.sin(roll) * math.cos(pitch)],
+        [0, -math.sin(roll), math.cos(roll) * math.cos(pitch)]
+    ])
+    
+    # Calculate angular velocity in body frame
+    angular_velocity = T @ np.array(rpy_rate)
+    
+    return angular_velocity
+
+def angular_velocity_to_rpy_rate(rpy, angular_velocity):
+    """
+    Convert angular velocity in body frame to RPY rates using vector inputs
+    
+    Parameters:
+    -----------
+    rpy : numpy.ndarray or list
+        [roll, pitch, yaw] Euler angles in radians
+    angular_velocity : numpy.ndarray or list
+        [p, q, r] angular velocity components in body frame (rad/s)
+    
+    Returns:
+    --------
+    numpy.ndarray
+        RPY rates vector [roll_rate, pitch_rate, yaw_rate] in rad/s
+    """
+    # Extract components
+    roll, pitch, yaw = rpy
+    p, q, r = angular_velocity
+    
+    # Avoid singularity at pitch = ±90° (gimbal lock)
+    if abs(math.cos(pitch)) < 1e-10:
+        raise ValueError("Near gimbal lock condition (pitch ≈ ±90°)")
+    
+    # Inverse transformation matrix
+    T_inv = np.array([
+        [1, math.sin(roll) * math.tan(pitch), math.cos(roll) * math.tan(pitch)],
+        [0, math.cos(roll), -math.sin(roll)],
+        [0, math.sin(roll) / math.cos(pitch), math.cos(roll) / math.cos(pitch)]
+    ])
+    
+    # Calculate RPY rates
+    rpy_rates = T_inv @ np.array(angular_velocity)
+    
+    return rpy_rates
+
+def desired_trajectory(T0, xi_di,Nt, dt):
+    """
+    Output: T_d, xi_d. T_d is SE3, xi_d is local velocity
+    for xi=[v,w]
+    """   
+    # constant xi_d traj
+    
+    xi_d = np.zeros((6, Nt))
+    T_d = np.zeros((4, 4, Nt))
+    t = 0
+    
+    for k in range(Nt):
+        # not constant xi_d traj, set Tfinal = 13.0
+        # xi_di = np.array([1, 0.5*np.cos(2*2*np.pi*(Nt-k)/Nt), 0, 0, 0, 0])
+        
+        T = T0 @ Exp_SE3(xi_di * t)
+        T_d[:, :, k] = T
+        xi_d[:, k] = xi_di
+        t = k * dt
+    
+    return T_d, xi_d
+
 class ConvexMpc:
     def __init__(
         self,
@@ -325,25 +416,42 @@ class ConvexMpc:
         self._R = self._rpy_to_rotation_matrix(com_roll_pitch_yaw)
         self._foot_friction_coeffs = foot_friction_coeffs
 
-        #xi_c = com_position+self._R ++ com_velocity + com_roll_pitch_yaw_rate
+        # Td0?? make relative trajectory
+        x_c = self.get_zeta(com_position,self._R) + self.get_xi(com_velocity,com_roll_pitch_yaw,com_roll_pitch_yaw_rate)
 
-        # x_d = desired_com_position + desired_com_velocity
-        # desired_com_roll_pitch_yaw
-        # desired_com_angular_velocity
-        
-        Ad,Bd,Termd = self.get_AB(x_d, x_c, false)
+        # temp, it is not correct
+        x_d = desired_com_position+desired_com_roll_pitch_yaw+desired_com_velocity+desired_com_angular_velocity
+        N_mpc = self._PLANNING_HORIZON_STEPS
+        Ad,Bd,Termd = self.get_AB(x_d, x_c, error_state_MPC=False)
         # self._weights = (roll_pitch_yaw, position, angular_velocity, velocity, gravity_place_holder)
         Q = np.diag([self._weights[3:6]+self._weights[:3]+self._weights[9:12]+self._weights[6:9]]) 
         R = 0.00001*np.identity(12)
-        X_ref_window 
-        xic
-        N_mpc = self._PLANNING_HORIZON_STEPS 
-        costN = 1.5 
-        error_state_MPC=false
-        return convex_mpc(Ad,Bd,Termd, Q, R,
+        # temp
+        X_ref_window = self.getDesLieTraj(com_position,self._R,x_d[6:12],N_mpc,self._PLANNING_TIMESTEP)
+        # ??# discard of xic with quaternions
+        q = Qtoq(self._R)
+        xic = com_position+q+self.get_xi(com_velocity,com_roll_pitch_yaw,com_roll_pitch_yaw_rate)         
+        costN = 1.5         
+        return self.convex_mpc(Ad,Bd,Termd, Q, R,
                X_ref_window, xic,
-               N_mpc, costN, error_state_MPC)
+               N_mpc, costN, error_state_MPC=False)
         # return np.zeros(12)
+
+    def getDesLieTraj(self,p,R,xi_d,Nt,dt):
+        T = np.zeros(4,4)
+        T[:3, :3] = R
+        T[:3, 3] = p
+        T_d_traj,xi_d_traj=desired_trajectory(T, xi_d,Nt, dt)    
+        return GetTrajLie(T_d_traj, xi_d_traj)
+    def get_zeta(self,p,R):
+        T = np.zeros(4,4)
+        T[:3, :3] = R
+        T[:3, 3] = p
+        return Log_SE3(T)
+
+    def get_xi(self,v,rpy,rpy_rate):
+        w = rpy_rate_to_angular_velocity(rpy,rpy_rate)
+        return np.array(v+w)
 
     # Linearized dynamics
     def get_AB(self,x_d, x_c, error_state_MPC=False):
